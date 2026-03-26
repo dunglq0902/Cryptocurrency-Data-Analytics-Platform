@@ -1,0 +1,13 @@
+# Environments
+# .env
+# venv/
+# __pycache__/
+
+# # Data & Logs
+# data/
+# logs/
+# *.csv
+# *.parquet
+
+# # IDE
+# .vscode/
