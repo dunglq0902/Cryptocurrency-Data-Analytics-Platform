@@ -1,5 +1,8 @@
 # Cryptocurrency Data Analytics Platform
-# 🧱 1. Tổng thể cấu trúc
+_**Nền tảng phân tích dữ liệu tiền điện tử**: Hệ thống Streaming Lakehouse toàn diện được xây dựng trên kiến trúc Kappa, chuyên phục vụ việc thu thập, xử lý và phân tích dữ liệu thị trường Crypto theo thời gian thực._
+
+
+## 🧱 1. Tổng thể cấu trúc
 
 ```bash
 crypto-streaming-lakehouse/
@@ -26,11 +29,11 @@ crypto-streaming-lakehouse/
 
 ---
 
-# 🚀 2. Chi tiết từng phần
+## 🚀 2. Chi tiết từng phần
 
 ---
 
-# 🏗️ infrastructure/
+### 🏗️ infrastructure/
 
 ```bash
 infrastructure/
@@ -59,7 +62,7 @@ infrastructure/
 
 ---
 
-# 📡 ingestion/ (Binance → Kafka)
+### 📡 ingestion/ (Binance → Kafka)
 
 ```bash
 ingestion/
@@ -83,7 +86,7 @@ ingestion/
 
 ---
 
-# 🔥 streaming/ (project core)
+### 🔥 streaming/ (project core)
 
 ```bash
 streaming/
@@ -116,7 +119,7 @@ streaming/
 
 ---
 
-# 🧊 lakehouse/ (Medallion Architecture)
+### 🧊 lakehouse/ (Medallion Architecture)
 
 ```bash
 lakehouse/
@@ -145,7 +148,7 @@ lakehouse/
 
 ---
 
-# 🗄️ warehouse/ (optional)
+### 🗄️ warehouse/ (optional)
 
 ```bash
 warehouse/
@@ -167,7 +170,7 @@ warehouse/
 
 ---
 
-# 🍃 nosql/
+### 🍃 nosql/
 
 ```bash
 nosql/
@@ -185,7 +188,7 @@ nosql/
 
 ---
 
-# 🤖 ml/
+### 🤖 ml/
 
 ```bash
 ml/
@@ -210,7 +213,7 @@ ml/
 
 ---
 
-# ⏰ orchestration/ (Airflow)
+### ⏰ orchestration/ (Airflow)
 
 ```bash
 orchestration/
@@ -229,7 +232,7 @@ orchestration/
 
 ---
 
-# 🌐 api/
+### 🌐 api/
 
 ```bash
 api/
@@ -250,7 +253,7 @@ api/
 
 ---
 
-# 📊 dashboard/
+### 📊 dashboard/
 
 ```bash
 dashboard/
@@ -263,7 +266,7 @@ dashboard/
 
 ---
 
-# 🧪 tests/
+### 🧪 tests/
 
 ```bash
 tests/
@@ -274,7 +277,7 @@ tests/
 
 ---
 
-# 📚 docs/
+### 📚 docs/
 
 ```bash
 docs/
@@ -287,14 +290,14 @@ docs/
 ---
 
 ==============================================================================================
-# 🧠 1. CORE TECH STACK (BẮT BUỘC – để đúng kiến trúc)
+## 🧠 1. CORE TECH STACK (BẮT BUỘC – để đúng kiến trúc)
 
-## 🔴 Streaming & Event Backbone
+### 🔴 Streaming & Event Backbone
 * Apache Kafka
   👉 Nhận data từ Binance → backbone của toàn hệ thống
 
 ---
-## 🔵 Processing Engine
+### 🔵 Processing Engine
 
 * Apache Spark (Structured Streaming)
 
@@ -306,7 +309,7 @@ docs/
 
 ---
 
-## 🧊 Lakehouse Storage
+### 🧊 Lakehouse Storage
 
 Chọn **1 trong 2** (không cần cả 2):
 
@@ -320,7 +323,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## 🗂️ Storage Layer
+### 🗂️ Storage Layer
 
 * Hadoop Distributed File System
   hoặc
@@ -328,7 +331,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## 🍃 NoSQL (theo yêu cầu môn)
+### 🍃 NoSQL (theo yêu cầu môn)
 
 * MongoDB
 
@@ -339,7 +342,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## 🤖 Machine Learning
+### 🤖 Machine Learning
 
 * Spark MLlib
 
@@ -347,9 +350,9 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-# 🚀 2. SUPPORTING TECH (NÊN CÓ – để “ăn điểm”)
+## 🚀 2. SUPPORTING TECH (NÊN CÓ – để “ăn điểm”)
 
-## 🐳 Container
+### 🐳 Container
 
 * Docker
 
@@ -357,7 +360,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## ☸️ Orchestration (bắt buộc đề bài)
+### ☸️ Orchestration (bắt buộc đề bài)
 
 * Kubernetes
 
@@ -369,7 +372,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## ⏰ Workflow
+### ⏰ Workflow
 
 * Apache Airflow
 
@@ -380,9 +383,9 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-# 📊 3. VISUALIZATION & SERVING (optional)
+## 📊 3. VISUALIZATION & SERVING (optional)
 
-## Dashboard
+### Dashboard
 
 * Apache Superset
   hoặc
@@ -390,7 +393,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## API
+### API
 
 * Python:
 
@@ -403,9 +406,9 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-# 🧱 4. OPTIONAL (advanced)
+## 🧱 4. OPTIONAL (advanced)
 
-## SQL Query Engine
+### SQL Query Engine
 
 * Trino
 
@@ -413,19 +416,19 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-## Data Warehouse (nếu muốn hybrid)
+### Data Warehouse (nếu muốn hybrid)
 
 * PostgreSQL
 
 ---
 
-## Message Schema
+### Message Schema
 
 * Apache Avro
 
 ---
 
-# 🧩 5. Mapping với thư mục bạn đã có
+## 🧩 5. Mapping với thư mục bạn đã có
 
 | Folder          | Công nghệ               |
 | --------------- | ----------------------- |
