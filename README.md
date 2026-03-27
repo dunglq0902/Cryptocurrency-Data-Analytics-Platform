@@ -1,5 +1,4 @@
-Ok, đây là **cấu trúc thư mục chuẩn “production-like”** cho project **Streaming Lakehouse (Kappa-style)** với stack của bạn (Kafka + Spark + Iceberg/Delta + NoSQL + MLlib + K8s).
-
+# Cryptocurrency Data Analytics Platform
 # 🧱 1. Tổng thể cấu trúc
 
 ```bash
@@ -27,7 +26,7 @@ crypto-streaming-lakehouse/
 
 ---
 
-# 🚀 2. Chi tiết từng phần (QUAN TRỌNG)
+# 🚀 2. Chi tiết từng phần
 
 ---
 
@@ -84,7 +83,7 @@ ingestion/
 
 ---
 
-# 🔥 streaming/ (CORE của project)
+# 🔥 streaming/ (project core)
 
 ```bash
 streaming/
@@ -146,7 +145,7 @@ lakehouse/
 
 ---
 
-# 🗄️ warehouse/ (optional nhưng nên có)
+# 🗄️ warehouse/ (optional)
 
 ```bash
 warehouse/
@@ -287,17 +286,6 @@ docs/
 
 ---
 
-# 🧠 3. Điểm mạnh của cấu trúc này
-
-👉 Nếu bạn làm theo:
-
-* ✅ Chuẩn **Streaming Lakehouse**
-* ✅ Chuẩn **Medallion architecture**
-* ✅ Có **real-time + batch unified**
-* ✅ Có **ML pipeline**
-* ✅ Có **production mindset**
-
-
 ==============================================================================================
 # 🧠 1. CORE TECH STACK (BẮT BUỘC – để đúng kiến trúc)
 
@@ -392,7 +380,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-# 📊 3. VISUALIZATION & SERVING (optional nhưng nên có)
+# 📊 3. VISUALIZATION & SERVING (optional)
 
 ## Dashboard
 
@@ -415,7 +403,7 @@ Chọn **1 trong 2** (không cần cả 2):
 
 ---
 
-# 🧱 4. OPTIONAL (để project “pro hơn”)
+# 🧱 4. OPTIONAL (advanced)
 
 ## SQL Query Engine
 
@@ -443,7 +431,7 @@ Chọn **1 trong 2** (không cần cả 2):
 | --------------- | ----------------------- |
 | ingestion/      | Python + Kafka          |
 | streaming/      | Spark                   |
-| lakehouse/      | Iceberg/Delta + S3/HDFS |=>Chọn Iceberg + HDFS
+| lakehouse/      | Iceberg + HDFS          |
 | nosql/          | MongoDB                 |
 | ml/             | Spark MLlib             |
 | orchestration/  | Airflow                 |
@@ -452,37 +440,3 @@ Chọn **1 trong 2** (không cần cả 2):
 | dashboard/      | Superset/Grafana        |
 
 ---
-
-# 🎯 6. Stack TỐI ƯU NHẤT cho bạn (khuyên dùng)
-
-👉 Đừng chọn quá nhiều → chọn stack này:
-
-```bash
-Kafka
-Spark (Structured Streaming)
-Iceberg + MinIO (S3 local)
-MongoDB
-MLlib
-Docker + Docker Compose
-(K8s nếu còn thời gian)
-```
-
----
-
-# 🔥 7. Kết luận
-
-👉 Để build project đúng **Streaming Lakehouse 2026**, bạn cần:
-
-> 🏆 **Kafka + Spark + Iceberg + Object Storage + NoSQL + MLlib + Docker/K8s**
-
----
-
-# 🧨 Insight quan trọng (giúp bạn hơn người khác)
-
-👉 Nhiều người sai ở chỗ:
-
-* Nghĩ Spark = chỉ xử lý
-* Nhưng thực tế:
-
-> 💡 **Spark + Iceberg = Data Warehouse kiểu mới (Lakehouse)**
-
