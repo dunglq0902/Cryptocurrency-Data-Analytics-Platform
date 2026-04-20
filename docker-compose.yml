@@ -1,0 +1,358 @@
+# ─────────────────────────────────────────────
+# Cryptocurrency Analytics Platform
+# Local development stack
+# ─────────────────────────────────────────────
+
+x-spark-common: &spark-common
+  image: crypto-analytics/spark:latest
+  build:
+    context: .
+    dockerfile: docker/Dockerfile.spark
+  environment:
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    HDFS_NAMENODE: hdfs://namenode:8020
+    MONGO_URI: mongodb://mongodb:27017
+    SPARK_MASTER: spark://spark-master:7077
+  volumes:
+    - ./spark:/opt/spark/work-dir/spark          # Mount only Spark source
+    - ./data:/opt/spark/work-dir/data            # Mount thư mục lưu Delta Lake
+  depends_on:
+    kafka:
+      condition: service_healthy
+    namenode:
+      condition: service_healthy
+  networks:
+    - crypto-net
+
+services:
+
+  # ── Zookeeper ────────────────────────────────────────────────────────────────
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: crypto-zookeeper
+    environment:
+      ZOO_4LW_COMMANDS_WHITELIST: "ruok"
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME:   2000
+    ports:
+      - "2181:2181"
+    networks:
+      - crypto-net
+
+  # ── Kafka ─────────────────────────────────────────────────────────────────────
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: crypto-kafka-1
+    depends_on:
+      zookeeper:
+        condition: service_started
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      KAFKA_BROKER_ID:                    1
+      KAFKA_ZOOKEEPER_CONNECT:            zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS:         PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENERS:                    PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME:   PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE:    "true"
+      KAFKA_LOG_RETENTION_HOURS:          168
+      KAFKA_HEAP_OPTS:                    "-Xmx1G -Xms1G"
+      KAFKA_JMX_PORT:                     9101
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 15s
+      timeout:  10s
+      retries:  10
+    networks:
+      - crypto-net
+
+  # ── Schema Registry ───────────────────────────────────────────────────────────
+  schema-registry:
+    image: confluentinc/cp-schema-registry:7.5.0
+    container_name: crypto-schema-registry
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    environment:
+      SCHEMA_REGISTRY_HOST_NAME:                     schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS:  kafka:29092
+      SCHEMA_REGISTRY_LISTENERS:                     http://0.0.0.0:8081
+    networks:
+      - crypto-net
+
+  # ── Kafka UI ──────────────────────────────────────────────────────────────────
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: crypto-kafka-ui
+    depends_on:
+      kafka:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME:              local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS:  kafka:29092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY:    http://schema-registry:8081
+    networks:
+      - crypto-net
+
+  # ── HDFS NameNode ─────────────────────────────────────────────────────────────
+  namenode:
+    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
+    container_name: crypto-namenode
+    hostname: namenode
+    ports:
+      - "9870:9870"   # Web UI
+      - "8020:8020"   # RPC
+    environment:
+      CLUSTER_NAME: crypto-analytics
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      HDFS_CONF_dfs_replication: 1
+    volumes:
+      - namenode-data:/hadoop/dfs/name
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9870/ || exit 1"]
+      interval: 30s
+      timeout:  15s
+      retries:  5
+    networks:
+      - crypto-net
+
+  # ── HDFS DataNode ─────────────────────────────────────────────────────────────
+  datanode:
+    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
+    container_name: crypto-datanode
+    depends_on:
+      namenode:
+        condition: service_healthy
+    ports:
+      - "9864:9864"
+    environment:
+      CLUSTER_NAME: crypto-analytics
+      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
+      SERVICE_PRECONDITION: namenode:9870
+    volumes:
+      - datanode-data:/hadoop/dfs/data
+    networks:
+      - crypto-net
+
+  # ── MongoDB ───────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7.0
+    container_name: crypto-mongodb
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: changeme
+      MONGO_INITDB_DATABASE:      crypto_analytics
+    volumes:
+      - mongodb-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+    networks:
+      - crypto-net
+
+  # ── Spark Master ──────────────────────────────────────────────────────────────
+  spark-master:
+    <<: *spark-common
+    container_name: crypto-spark-master
+    command: ["/opt/spark/bin/spark-class", "org.apache.spark.deploy.master.Master"]
+    ports:
+      - "7077:7077"   # Spark master RPC
+      - "4040:4040"   # Spark UI
+      - "8082:8080"   # Master Web UI
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      HDFS_NAMENODE: hdfs://namenode:8020
+      MONGO_URI: mongodb://mongodb:27017
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_MASTER_HOST: spark-master
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 15s
+      timeout:  10s
+      retries:  5
+
+  # ── Spark Worker ──────────────────────────────────────────────────────────────
+  spark-worker:
+    <<: *spark-common
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.worker.Worker
+      - spark://spark-master:7077
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      HDFS_NAMENODE: hdfs://namenode:8020
+      MONGO_URI: mongodb://mongodb:27017
+      SPARK_MASTER: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 4g
+      SPARK_WORKER_CORES:  2
+    deploy:
+      replicas: 2
+
+  # ── Airflow ───────────────────────────────────────────────────────────────────
+  airflow-webserver:
+    image: apache/airflow:2.8.0
+    container_name: crypto-airflow-webserver
+    command: webserver
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    ports:
+      - "8081:8080"
+    environment: &airflow-env
+      AIRFLOW__CORE__EXECUTOR:          LocalExecutor
+      AIRFLOW__CORE__SQL_ALCHEMY_CONN:  postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+      AIRFLOW__CORE__FERNET_KEY:        ""
+      AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+      AIRFLOW__CORE__LOAD_EXAMPLES:     "false"
+      AIRFLOW__WEBSERVER__SECRET_KEY:   "changeme"
+      KAFKA_BOOTSTRAP_SERVERS:          kafka:29092
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+    networks:
+      - crypto-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout:  10s
+      retries:  5
+
+  airflow-scheduler:
+    image: apache/airflow:2.8.0
+    container_name: crypto-airflow-scheduler
+    command: scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    environment: *airflow-env
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/plugins:/opt/airflow/plugins
+    networks:
+      - crypto-net
+
+  airflow-postgres:
+    image: postgres:15
+    container_name: crypto-airflow-postgres
+    environment:
+      POSTGRES_USER:     airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB:       airflow
+    volumes:
+      - airflow-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries:  5
+    networks:
+      - crypto-net
+
+  airflow-init:
+    image: apache/airflow:2.8.0
+    container_name: crypto-airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db upgrade
+        airflow users create \
+          --username admin --password admin \
+          --firstname Admin --lastname User \
+          --role Admin --email admin@example.com
+    environment: *airflow-env
+    depends_on:
+      airflow-postgres:
+        condition: service_healthy
+    networks:
+      - crypto-net
+
+  # ── Alert Engine API ──────────────────────────────────────────────────────────
+  alert-api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.alert-engine
+    container_name: crypto-alert-api
+    ports:
+      - "8000:8000"
+    environment:
+      MONGO_URI:        mongodb://root:changeme@mongodb:27017
+      MONGO_DB:         crypto_analytics
+      NOTIFICATION_SVC: http://notification-service:8001
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - crypto-net
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.alert-engine
+    container_name: crypto-notification-svc
+    command: ["uvicorn", "alert-engine.notifier.notification_service:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+    networks:
+      - crypto-net
+
+  # ── Prometheus & Grafana ──────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.49.0
+    container_name: crypto-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.retention.time=15d"
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alert_rules.yml:/etc/prometheus/rules/alert_rules.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      - crypto-net
+
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: crypto-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning/dashboards:ro
+    depends_on:
+      - prometheus
+    networks:
+      - crypto-net
+
+# ── Named Volumes ──────────────────────────────────────────────────────────────
+volumes:
+  namenode-data:
+  datanode-data:
+  mongodb-data:
+  airflow-postgres-data:
+  prometheus-data:
+  grafana-data:
+
+# ── Network ────────────────────────────────────────────────────────────────────
+networks:
+  crypto-net:
+    driver: bridge
