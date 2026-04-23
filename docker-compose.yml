@@ -13,6 +13,8 @@ x-spark-common: &spark-common
     HDFS_NAMENODE: hdfs://namenode:8020
     MONGO_URI: mongodb://mongodb:27017
     SPARK_MASTER: spark://spark-master:7077
+    SPARK_WORKER_DIR: /tmp/spark-work
+    SPARK_LOCAL_DIRS: /tmp/spark-local
   volumes:
     - ./spark:/opt/spark/work-dir/spark          # Mount only Spark source
     - ./data:/opt/spark/work-dir/data            # Mount thư mục lưu Delta Lake
@@ -211,7 +213,7 @@ services:
       airflow-init:
         condition: service_completed_successfully
     ports:
-      - "8081:8080"
+      - "8085:8080"
     environment: &airflow-env
       AIRFLOW__CORE__EXECUTOR:          LocalExecutor
       AIRFLOW__CORE__SQL_ALCHEMY_CONN:  postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
@@ -262,6 +264,7 @@ services:
       - crypto-net
 
   airflow-init:
+    # Là container khởi tạo (one-shot job)
     image: apache/airflow:2.8.0
     container_name: crypto-airflow-init
     entrypoint: /bin/bash
@@ -279,6 +282,7 @@ services:
         condition: service_healthy
     networks:
       - crypto-net
+
 
   # ── Alert Engine API ──────────────────────────────────────────────────────────
   alert-api:
