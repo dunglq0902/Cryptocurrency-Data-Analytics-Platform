@@ -54,7 +54,7 @@
 ┌─────────────────────────────▼───────────────────────────────────────┐
 │                      PROCESSING LAYER                               │
 │  Bronze (raw)  ──►  Silver (cleaned + indicators)  ──►  Gold (agg) │
-│  HDFS/Delta         HDFS/Delta Lake                  HDFS/Delta     │
+│  S3/Delta         S3/Delta Lake                  S3/Delta     │
 └─────────────────────────────┬───────────────────────────────────────┘
                               │
        ┌──────────────────────┼──────────────────────┐
@@ -145,7 +145,7 @@ crypto-analytics-platform/
 │   └── requirements.ingestion.txt
 │
 ├── helm/
-│   ├── infra/                      # Chart for Kafka, HDFS, MongoDB
+│   ├── infra/                      # Chart for Kafka, MinIO, MongoDB
 │   │   ├── Chart.yaml
 │   │   └── values.yaml
 │   └── apps/                       # Chart for Alert Engine, Airflow, Ingestion
@@ -188,7 +188,7 @@ crypto-analytics-platform/
 | Data Source | Binance WebSocket/REST API | v3 |
 | Message Queue | Apache Kafka + Schema Registry | 3.6+ / 7.5 |
 | Stream Processing | Apache Spark (PySpark) | 3.5+ |
-| Distributed Storage | HDFS + Delta Lake | 3.x |
+| Distributed Storage | MinIO/S3 + Delta Lake | 3.x |
 | NoSQL Database | MongoDB | 7.x |
 | Orchestration | Apache Airflow | 2.8+ |
 | Alert Engine | FastAPI + Motor | 0.109 / 3.3 |
@@ -265,7 +265,7 @@ bash scripts/submit_spark_job.sh silver --date $(date +%Y-%m-%d)
 bash scripts/submit_spark_job.sh gold --date $(date +%Y-%m-%d)
 
 # 6. Khởi động Alert Engine API
-uvicorn alert-engine.api.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn alert_engine.api.main:app --host 0.0.0.0 --port 8000 --reload
 
 # 7. Seed sample alert rules
 python scripts/seed_data.py
@@ -281,7 +281,7 @@ python scripts/seed_data.py
 | Alert Engine API | http://localhost:8000/docs | — |
 | Grafana | http://localhost:3000 | admin / admin |
 | Prometheus | http://localhost:9090 | — |
-| HDFS NameNode | http://localhost:9870 | — |
+| MinIO Console | http://localhost:9001 | — |
 
 ---
 
@@ -309,7 +309,7 @@ helm repo update
 # Tạo namespaces
 kubectl apply -f k8s/namespaces/namespaces.yaml
 
-# Deploy infrastructure (Kafka, MongoDB, HDFS)
+# Deploy infrastructure (Kafka, MongoDB, MinIO)
 helm upgrade --install crypto-infra ./helm/infra \
   --namespace kafka-system \
   --values helm/infra/values.yaml
@@ -373,7 +373,7 @@ kubectl logs -n spark-system -l spark-role=driver
 | `BINANCE_API_KEY` | Binance API key | — |
 | `BINANCE_API_SECRET` | Binance API secret | — |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker address | `localhost:9092` |
-| `HDFS_NAMENODE` | HDFS NameNode URI | `hdfs://namenode:8020` |
+| `S3_ENDPOINT` | MinIO S3 Endpoint | `http://minio:9000` |
 | `MONGO_URI` | MongoDB connection string | `mongodb://localhost:27017` |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token | — |
 | `SPARK_MASTER` | Spark master URL | `local[*]` |
@@ -570,6 +570,6 @@ Pipeline GitHub Actions (`.github/workflows/ci.yml`):
 - File `.env` chứa API keys nhạy cảm — **không commit** vào Git.
 - Cấu hình Kubernetes secrets trong production bằng **Sealed Secrets** hoặc **Vault**.
 - Delta Lake VACUUM giữ 7 ngày lịch sử (Bronze), 14 ngày (Silver), 30 ngày (Gold).
-- Spark streaming jobs sử dụng **RocksDB State Store** và checkpoint trên HDFS — đảm bảo HDFS luôn khả dụng trước khi submit jobs.
+- Spark streaming jobs sử dụng **RocksDB State Store** và checkpoint trên MinIO — đảm bảo MinIO luôn khả dụng trước khi submit jobs.
 
 ---
