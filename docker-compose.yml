@@ -10,19 +10,21 @@ x-spark-common: &spark-common
     dockerfile: docker/Dockerfile.spark
   environment:
     KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-    HDFS_NAMENODE: hdfs://namenode:8020
+    S3_ENDPOINT: http://minio:9000
+    AWS_ACCESS_KEY_ID: admin
+    AWS_SECRET_ACCESS_KEY: password
+    AWS_REGION: us-east-1
     MONGO_URI: mongodb://mongodb:27017
     SPARK_MASTER: spark://spark-master:7077
     SPARK_WORKER_DIR: /tmp/spark-work
     SPARK_LOCAL_DIRS: /tmp/spark-local
   volumes:
     - ./spark:/opt/spark/work-dir/spark          # Mount only Spark source
-    - ./data:/opt/spark/work-dir/data            # Mount thư mục lưu Delta Lake
   depends_on:
     kafka:
       condition: service_healthy
-    namenode:
-      condition: service_healthy
+    minio:
+      condition: service_started
   networks:
     - crypto-net
 
@@ -71,22 +73,6 @@ services:
     networks:
       - crypto-net
 
-  # ── Schema Registry ───────────────────────────────────────────────────────────
-  schema-registry:
-    image: confluentinc/cp-schema-registry:7.5.0
-    container_name: crypto-schema-registry
-    depends_on:
-      kafka:
-        condition: service_healthy
-    ports:
-      - "8081:8081"
-    environment:
-      SCHEMA_REGISTRY_HOST_NAME:                     schema-registry
-      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS:  kafka:29092
-      SCHEMA_REGISTRY_LISTENERS:                     http://0.0.0.0:8081
-    networks:
-      - crypto-net
-
   # ── Kafka UI ──────────────────────────────────────────────────────────────────
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -99,47 +85,40 @@ services:
     environment:
       KAFKA_CLUSTERS_0_NAME:              local
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS:  kafka:29092
-      KAFKA_CLUSTERS_0_SCHEMAREGISTRY:    http://schema-registry:8081
     networks:
       - crypto-net
 
-  # ── HDFS NameNode ─────────────────────────────────────────────────────────────
-  namenode:
-    image: bde2020/hadoop-namenode:2.0.0-hadoop3.2.1-java8
-    container_name: crypto-namenode
-    hostname: namenode
+  # ── MinIO ─────────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:RELEASE.2023-11-20T22-40-07Z
+    container_name: crypto-minio
     ports:
-      - "9870:9870"   # Web UI
-      - "8020:8020"   # RPC
+      - "9000:9000"
+      - "9001:9001"
     environment:
-      CLUSTER_NAME: crypto-analytics
-      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
-      HDFS_CONF_dfs_replication: 1
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password
+    command: server /data --console-address ":9001"
     volumes:
-      - namenode-data:/hadoop/dfs/name
+      - minio-data:/data
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9870/ || exit 1"]
-      interval: 30s
-      timeout:  15s
-      retries:  5
+      test: ["NONE"]
     networks:
       - crypto-net
 
-  # ── HDFS DataNode ─────────────────────────────────────────────────────────────
-  datanode:
-    image: bde2020/hadoop-datanode:2.0.0-hadoop3.2.1-java8
-    container_name: crypto-datanode
+  minio-init:
+    image: minio/mc:RELEASE.2023-11-20T16-30-59Z
+    container_name: crypto-minio-init
     depends_on:
-      namenode:
-        condition: service_healthy
-    ports:
-      - "9864:9864"
-    environment:
-      CLUSTER_NAME: crypto-analytics
-      CORE_CONF_fs_defaultFS: hdfs://namenode:8020
-      SERVICE_PRECONDITION: namenode:9870
-    volumes:
-      - datanode-data:/hadoop/dfs/data
+      minio:
+        condition: service_started
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add myminio http://minio:9000 admin password;
+      /usr/bin/mc mb myminio/crypto-lake || true;
+      /usr/bin/mc mb myminio/checkpoints || true;
+      exit 0;
+      "
     networks:
       - crypto-net
 
@@ -174,7 +153,10 @@ services:
       - "8082:8080"   # Master Web UI
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      HDFS_NAMENODE: hdfs://namenode:8020
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
       MONGO_URI: mongodb://mongodb:27017
       SPARK_MASTER: spark://spark-master:7077
       SPARK_MASTER_HOST: spark-master
@@ -196,17 +178,22 @@ services:
         condition: service_healthy
     environment:
       KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      HDFS_NAMENODE: hdfs://namenode:8020
+      S3_ENDPOINT: http://minio:9000
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: password
+      AWS_REGION: us-east-1
       MONGO_URI: mongodb://mongodb:27017
       SPARK_MASTER: spark://spark-master:7077
-      SPARK_WORKER_MEMORY: 4g
-      SPARK_WORKER_CORES:  2
+      SPARK_WORKER_MEMORY: 3g
+      SPARK_WORKER_CORES:  1
     deploy:
-      replicas: 2
+      replicas: 1
 
   # ── Airflow ───────────────────────────────────────────────────────────────────
   airflow-webserver:
-    image: apache/airflow:2.8.0
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
     container_name: crypto-airflow-webserver
     command: webserver
     depends_on:
@@ -225,6 +212,8 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark:/opt/airflow/spark
+      - ./ingestion:/opt/airflow/ingestion
     networks:
       - crypto-net
     healthcheck:
@@ -234,7 +223,9 @@ services:
       retries:  5
 
   airflow-scheduler:
-    image: apache/airflow:2.8.0
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
     container_name: crypto-airflow-scheduler
     command: scheduler
     depends_on:
@@ -244,6 +235,8 @@ services:
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/plugins:/opt/airflow/plugins
+      - ./spark:/opt/airflow/spark
+      - ./ingestion:/opt/airflow/ingestion
     networks:
       - crypto-net
 
@@ -264,18 +257,22 @@ services:
       - crypto-net
 
   airflow-init:
-    # Là container khởi tạo (one-shot job)
-    image: apache/airflow:2.8.0
+    # One-shot container to initialize Airflow DB, users and connections
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.airflow
     container_name: crypto-airflow-init
     entrypoint: /bin/bash
     command:
       - -c
       - |
-        airflow db upgrade
+        airflow db upgrade || true
         airflow users create \
           --username admin --password admin \
           --firstname Admin --lastname User \
-          --role Admin --email admin@example.com
+          --role Admin --email admin@example.com || true
+        airflow connections add 'spark_local' --conn-type 'spark' --conn-host 'spark://spark-master' --conn-port '7077' || true
+        airflow connections add 'spark_k8s' --conn-type 'spark' --conn-host 'spark://spark-master' --conn-port '7077' || true
     environment: *airflow-env
     depends_on:
       airflow-postgres:
@@ -307,7 +304,7 @@ services:
       context: .
       dockerfile: docker/Dockerfile.alert-engine
     container_name: crypto-notification-svc
-    command: ["uvicorn", "alert-engine.notifier.notification_service:app", "--host", "0.0.0.0", "--port", "8001"]
+    command: ["uvicorn", "alert_engine.notifier.notification_service:app", "--host", "0.0.0.0", "--port", "8001"]
     ports:
       - "8001:8001"
     env_file:
@@ -347,10 +344,57 @@ services:
     networks:
       - crypto-net
 
+  # ── Initialization & Ingestion ────────────────────────────────────────────────
+  kafka-init:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: crypto-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+      echo 'Creating Kafka topics...' &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic raw-crypto-ticks --partitions 5 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic raw-ohlcv --partitions 5 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic raw-orderbook --partitions 5 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic processed-signals --partitions 5 --replication-factor 1 &&
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic alert-events --partitions 5 --replication-factor 1 &&
+      echo 'Kafka topics created.'
+      "
+    networks:
+      - crypto-net
+
+  mongo-seed:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.alert-engine
+    container_name: crypto-mongo-seed
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: >
+      bash -c "
+      python scripts/seed_data.py --mongo-uri mongodb://root:changeme@mongodb:27017 --db crypto_analytics
+      "
+    networks:
+      - crypto-net
+
+  ingestion-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.ingestion
+    container_name: crypto-ingestion-service
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - crypto-net
+
 # ── Named Volumes ──────────────────────────────────────────────────────────────
 volumes:
-  namenode-data:
-  datanode-data:
+  minio-data:
   mongodb-data:
   airflow-postgres-data:
   prometheus-data:

@@ -78,18 +78,33 @@ def parse_kline_event(raw: dict) -> Optional[dict]:
 
 
 def parse_trade_event(raw: dict) -> Optional[dict]:
-    """Parse Binance individual trade stream event (tolerant to missing fields)."""
+    """Parse Binance individual trade stream event.
+
+    Return `None` when required fields are missing or invalid.
+    """
     try:
+        symbol = raw.get("s")
+        price_raw = raw.get("p")
+        qty_raw = raw.get("q")
+
+        # Required fields: symbol, price, quantity
+        if symbol is None or price_raw is None or qty_raw is None:
+            logger.warning("Missing required trade fields | raw=%s", raw)
+            return None
+
         event_time_ms = raw.get("E")
         trade_time_ms = raw.get("T") or event_time_ms
 
+        price = float(price_raw)
+        quantity = float(qty_raw)
+
         return {
-            "symbol":         raw.get("s"),
+            "symbol":         symbol,
             "event_time":     datetime.fromtimestamp(event_time_ms / 1000, tz=timezone.utc).isoformat() if event_time_ms is not None else None,
             "ingest_time":    datetime.now(tz=timezone.utc).isoformat(),
             "trade_id":       raw.get("t"),
-            "price":          float(raw.get("p", 0)),
-            "quantity":       float(raw.get("q", 0)),
+            "price":          price,
+            "quantity":       quantity,
             "buyer_order_id": raw.get("b"),   # may be absent
             "seller_order_id":raw.get("a"),   # may be absent
             "trade_time":     datetime.fromtimestamp(trade_time_ms / 1000, tz=timezone.utc).isoformat() if trade_time_ms is not None else None,
@@ -202,7 +217,7 @@ class BinanceWebSocketProducer:
                 topic=topic,
                 value=value_bytes,
                 key=key_bytes,
-                partition=partition,
+                # partition=partition,
                 callback=delivery_report,
             )
             self._msg_count += 1

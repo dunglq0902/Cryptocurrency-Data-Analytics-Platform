@@ -229,7 +229,7 @@ class BinanceRESTProducer:
                         topic=TOPICS["raw_ohlcv"],
                         value=value_bytes,
                         key=key_bytes,
-                        partition=partition,
+                        # partition=partition,
                         callback=_delivery_report,
                     )
                     symbol_count += 1

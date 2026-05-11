@@ -13,9 +13,6 @@ from dotenv import load_dotenv
 # Kafka Broker Settings
 # ─────────────────────────────────────────────
 KAFKA_BOOTSTRAP_SERVERS: str = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
-SCHEMA_REGISTRY_URL: str = os.getenv("SCHEMA_REGISTRY_URL", "http://localhost:8081")
-# SCHEMA_REGISTRY_URL trỏ tới Schema Registry server
-# Đây là nơi lưu schema (cấu trúc dữ liệu) của message trong Kafka.
 
 # ─────────────────────────────────────────────
 # Topic Definitions
