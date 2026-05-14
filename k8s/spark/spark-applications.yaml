@@ -1,0 +1,186 @@
+---
+# k8s/spark/spark-rbac.yaml
+# ServiceAccount and RBAC for Spark driver to create/delete executor pods
+
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spark-driver
+  namespace: spark-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: spark-driver-role
+  namespace: spark-system
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "persistentvolumeclaims"]
+    verbs:     ["create", "get", "list", "watch", "delete", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs:     ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: spark-driver-rolebinding
+  namespace: spark-system
+subjects:
+  - kind: ServiceAccount
+    name: spark-driver
+    namespace: spark-system
+roleRef:
+  kind: Role
+  name: spark-driver-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# ── SparkApplication CRD: Bronze Ingest ───────────────────────────────────────
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: crypto-bronze-ingest
+  namespace: spark-system
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: crypto-analytics/spark:3.5.0
+  imagePullPolicy: Always
+  mainApplicationFile: "local:///opt/spark/work-dir/spark/jobs/bronze_ingest.py"
+  sparkVersion: "3.5.0"
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 3
+    onFailureRetryInterval: 10
+    onSubmissionFailureRetries: 5
+    onSubmissionFailureRetryInterval: 20
+  sparkConf:
+    "spark.sql.extensions":                          "io.delta.sql.DeltaSparkSessionExtension"
+    "spark.sql.catalog.spark_catalog":               "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+    "spark.sql.streaming.stateStore.providerClass":  "org.apache.spark.sql.execution.streaming.state.RocksDBStateStoreProvider"
+    "spark.sql.adaptive.enabled":                    "true"
+    "spark.serializer":                              "org.apache.spark.serializer.KryoSerializer"
+    "spark.hadoop.fs.defaultFS":                     "hdfs://namenode.storage-system.svc.cluster.local:8020"
+  driver:
+    cores: 1
+    memory: "2g"
+    serviceAccount: spark-driver
+    labels:
+      app: spark-bronze-ingest
+      layer: bronze
+    envVars:
+      - name: KAFKA_BOOTSTRAP_SERVERS
+        value: "kafka-headless.kafka-system.svc.cluster.local:9092"
+      - name: HDFS_NAMENODE
+        value: "hdfs://namenode.storage-system.svc.cluster.local:8020"
+  executor:
+    cores: 2
+    instances: 2
+    memory: "4g"
+    memoryOverhead: "512m"
+    labels:
+      app: spark-bronze-ingest
+      layer: bronze
+  dynamicAllocation:
+    enabled: true
+    initialExecutors: 2
+    minExecutors: 2
+    maxExecutors: 6
+  deps:
+    packages:
+      - "io.delta:delta-spark_2.12:3.1.0"
+      - "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0"
+---
+# ── SparkApplication CRD: Silver Clean ────────────────────────────────────────
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: crypto-silver-clean
+  namespace: spark-system
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: crypto-analytics/spark:3.5.0
+  imagePullPolicy: Always
+  mainApplicationFile: "local:///opt/spark/work-dir/spark/jobs/silver_clean.py"
+  arguments:
+    - "--mode"
+    - "batch"
+  sparkVersion: "3.5.0"
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 2
+    onFailureRetryInterval: 30
+  sparkConf:
+    "spark.sql.extensions":                          "io.delta.sql.DeltaSparkSessionExtension"
+    "spark.sql.catalog.spark_catalog":               "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+    "spark.sql.adaptive.enabled":                    "true"
+    "spark.sql.shuffle.partitions":                  "100"
+    "spark.hadoop.fs.defaultFS":                     "hdfs://namenode.storage-system.svc.cluster.local:8020"
+  driver:
+    cores: 1
+    memory: "2g"
+    serviceAccount: spark-driver
+  executor:
+    cores: 4
+    instances: 3
+    memory: "6g"
+    memoryOverhead: "1g"
+  dynamicAllocation:
+    enabled: true
+    initialExecutors: 2
+    minExecutors: 2
+    maxExecutors: 8
+  deps:
+    packages:
+      - "io.delta:delta-spark_2.12:3.1.0"
+---
+# ── SparkApplication CRD: Gold Aggregate ──────────────────────────────────────
+apiVersion: sparkoperator.k8s.io/v1beta2
+kind: SparkApplication
+metadata:
+  name: crypto-gold-aggregate
+  namespace: spark-system
+spec:
+  type: Python
+  pythonVersion: "3"
+  mode: cluster
+  image: crypto-analytics/spark:3.5.0
+  imagePullPolicy: Always
+  mainApplicationFile: "local:///opt/spark/work-dir/spark/jobs/gold_aggregate.py"
+  arguments:
+    - "--mode"
+    - "batch"
+  sparkVersion: "3.5.0"
+  restartPolicy:
+    type: OnFailure
+    onFailureRetries: 2
+    onFailureRetryInterval: 30
+  sparkConf:
+    "spark.sql.extensions":                          "io.delta.sql.DeltaSparkSessionExtension"
+    "spark.sql.catalog.spark_catalog":               "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+    "spark.sql.adaptive.enabled":                    "true"
+    "spark.sql.adaptive.skewJoin.enabled":           "true"
+    "spark.sql.autoBroadcastJoinThreshold":          "10485760"
+    "spark.sql.shuffle.partitions":                  "200"
+    "spark.hadoop.fs.defaultFS":                     "hdfs://namenode.storage-system.svc.cluster.local:8020"
+  driver:
+    cores: 2
+    memory: "4g"
+    serviceAccount: spark-driver
+  executor:
+    cores: 4
+    instances: 4
+    memory: "8g"
+    memoryOverhead: "1g"
+  dynamicAllocation:
+    enabled: true
+    initialExecutors: 2
+    minExecutors: 2
+    maxExecutors: 8
+  deps:
+    packages:
+      - "io.delta:delta-spark_2.12:3.1.0"
+      - "org.mongodb.spark:mongo-spark-connector_2.12:10.3.0"
