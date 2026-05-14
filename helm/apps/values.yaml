@@ -1,0 +1,176 @@
+# helm/apps/values.yaml
+# Helm values for application-layer services:
+#   Alert Engine API, Notification Service, Ingestion Producers, Airflow
+
+# ── Global ─────────────────────────────────────────────────────────────────────
+global:
+  imageRegistry: ""
+  imageTag:      "latest"
+  environment:   "production"
+
+# ── Alert Engine API ───────────────────────────────────────────────────────────
+alertApi:
+  enabled:      true
+  replicaCount: 2
+  image:
+    repository: crypto-analytics/alert-engine
+    tag:        "latest"
+    pullPolicy: Always
+  service:
+    type: ClusterIP
+    port: 8000
+  ingress:
+    enabled: true
+    host:    "alert-api.crypto-analytics.example.com"
+    tls:     true
+  env:
+    MONGO_URI:
+      secretName: mongo-credentials
+      secretKey:  uri
+    MONGO_DB:       crypto_analytics
+    NOTIFICATION_SVC: "http://notification-service:8001"
+  resources:
+    requests:
+      cpu:    "200m"
+      memory: "256Mi"
+    limits:
+      cpu:    "500m"
+      memory: "512Mi"
+  autoscaling:
+    enabled:     true
+    minReplicas: 2
+    maxReplicas: 6
+    cpuThreshold: 70
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds:       15
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds:       10
+
+# ── Notification Service ───────────────────────────────────────────────────────
+notificationService:
+  enabled:      true
+  replicaCount: 2
+  image:
+    repository: crypto-analytics/alert-engine
+    tag:        "latest"
+  command:
+    - uvicorn
+    - "alert-engine.notifier.notification_service:app"
+    - "--host"
+    - "0.0.0.0"
+    - "--port"
+    - "8001"
+  service:
+    type: ClusterIP
+    port: 8001
+  env:
+    TELEGRAM_BOT_TOKEN:
+      secretName: notification-secrets
+      secretKey:  telegram-bot-token
+    SMTP_HOST:     smtp.gmail.com
+    SMTP_PORT:     "587"
+    SMTP_USER:
+      secretName: notification-secrets
+      secretKey:  smtp-user
+    SMTP_PASSWORD:
+      secretName: notification-secrets
+      secretKey:  smtp-password
+  resources:
+    requests:
+      cpu:    "100m"
+      memory: "128Mi"
+    limits:
+      cpu:    "300m"
+      memory: "256Mi"
+
+# ── Ingestion Producer (WebSocket) ─────────────────────────────────────────────
+ingestion:
+  enabled:      true
+  replicaCount: 1
+  image:
+    repository: crypto-analytics/ingestion
+    tag:        "latest"
+  command:
+    - python
+    - ingestion/binance_ws_producer.py
+    - "--symbols"
+    - "BTCUSDT ETHUSDT BNBUSDT SOLUSDT XRPUSDT"
+    - "--interval"
+    - "1m"
+  env:
+    KAFKA_BOOTSTRAP_SERVERS: "kafka-headless.kafka-system.svc.cluster.local:9092"
+    BINANCE_API_KEY:
+      secretName: binance-credentials
+      secretKey:  api-key
+    BINANCE_API_SECRET:
+      secretName: binance-credentials
+      secretKey:  api-secret
+  resources:
+    requests:
+      cpu:    "200m"
+      memory: "256Mi"
+    limits:
+      cpu:    "500m"
+      memory: "512Mi"
+  # Restart automatically if producer pod crashes
+  restartPolicy: Always
+
+# ── Airflow ────────────────────────────────────────────────────────────────────
+airflow:
+  enabled: true
+  # Uses the official Apache Airflow Helm chart as a dependency
+  # Run: helm repo add apache-airflow https://airflow.apache.org
+  executor:        KubernetesExecutor
+  fernetKey:       "changeme-fernet-key-32-chars-long!!"
+  webserverSecretKey: "changeme-webserver-secret"
+  dags:
+    gitSync:
+      enabled:    true
+      repo:       "https://github.com/your-org/crypto-analytics-platform.git"
+      branch:     main
+      subPath:    "airflow/dags"
+  postgresql:
+    enabled: true
+  workers:
+    replicas: 2
+    resources:
+      requests:
+        cpu:    "500m"
+        memory: "1Gi"
+      limits:
+        cpu:    "1000m"
+        memory: "2Gi"
+  scheduler:
+    resources:
+      requests:
+        cpu:    "500m"
+        memory: "1Gi"
+      limits:
+        cpu:    "1000m"
+        memory: "2Gi"
+  webserver:
+    service:
+      type: NodePort
+      nodePort: 30080
+    resources:
+      requests:
+        cpu:    "300m"
+        memory: "512Mi"
+      limits:
+        cpu:    "500m"
+        memory: "1Gi"
+  env:
+    - name: AIRFLOW__CORE__LOAD_EXAMPLES
+      value: "False"
+    - name: AIRFLOW__CORE__DEFAULT_TIMEZONE
+      value: "UTC"
+    - name: SPARK_CONN_ID
+      value: "spark_k8s"

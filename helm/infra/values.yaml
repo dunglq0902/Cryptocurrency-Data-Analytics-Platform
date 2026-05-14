@@ -1,0 +1,135 @@
+# helm/infra/values.yaml
+# Helm values for infrastructure components:
+#   Kafka, HDFS (via chart or custom), MongoDB, Schema Registry
+
+# ── Global ─────────────────────────────────────────────────────────────────────
+global:
+  imageRegistry:  ""
+  storageClass:   "standard"   # override with your StorageClass (e.g. gp2 on AWS)
+  namespace:      ""           # defaults to Release namespace if blank
+
+# ── Kafka ──────────────────────────────────────────────────────────────────────
+kafka:
+  enabled: true
+  replicaCount: 3
+  image:
+    repository: confluentinc/cp-kafka
+    tag:        "7.5.0"
+  resources:
+    requests:
+      cpu:    "500m"
+      memory: "2Gi"
+    limits:
+      cpu:    "2000m"
+      memory: "4Gi"
+  persistence:
+    enabled:      true
+    size:         "50Gi"
+    storageClass: "standard"
+  config:
+    defaultReplicationFactor:  3
+    minInsyncReplicas:         2
+    autoCreateTopicsEnable:    true
+    logRetentionHours:         168
+    logSegmentBytes:           1073741824
+  topics:
+    - name:              raw-crypto-ticks
+      partitions:        5
+      replicationFactor: 3
+      retentionMs:       604800000    # 7 days
+    - name:              raw-ohlcv
+      partitions:        5
+      replicationFactor: 3
+      retentionMs:       604800000
+    - name:              raw-orderbook
+      partitions:        5
+      replicationFactor: 3
+      retentionMs:       86400000     # 1 day
+    - name:              processed-signals
+      partitions:        5
+      replicationFactor: 3
+      retentionMs:       2592000000   # 30 days
+    - name:              alert-events
+      partitions:        5
+      replicationFactor: 3
+      retentionMs:       2592000000
+
+# ── Zookeeper ──────────────────────────────────────────────────────────────────
+zookeeper:
+  enabled:      true
+  replicaCount: 3
+  resources:
+    requests:
+      cpu:    "250m"
+      memory: "512Mi"
+    limits:
+      cpu:    "500m"
+      memory: "1Gi"
+  persistence:
+    size: "10Gi"
+
+# ── Schema Registry ────────────────────────────────────────────────────────────
+schemaRegistry:
+  enabled: true
+  image:
+    repository: confluentinc/cp-schema-registry
+    tag:        "7.5.0"
+  replicaCount: 1
+  resources:
+    requests:
+      cpu:    "200m"
+      memory: "512Mi"
+    limits:
+      cpu:    "500m"
+      memory: "1Gi"
+
+# ── HDFS ───────────────────────────────────────────────────────────────────────
+hdfs:
+  enabled: true
+  nameNode:
+    replicaCount: 1
+    resources:
+      requests:
+        cpu:    "500m"
+        memory: "1Gi"
+      limits:
+        cpu:    "1000m"
+        memory: "2Gi"
+    persistence:
+      size: "20Gi"
+  dataNode:
+    replicaCount: 3
+    resources:
+      requests:
+        cpu:    "500m"
+        memory: "2Gi"
+      limits:
+        cpu:    "2000m"
+        memory: "4Gi"
+    persistence:
+      size: "100Gi"
+  config:
+    replicationFactor: 3
+    blockSize:         134217728    # 128 MB
+
+# ── MongoDB ────────────────────────────────────────────────────────────────────
+mongodb:
+  enabled: true
+  architecture: replicaset
+  replicaCount: 3
+  auth:
+    enabled:          true
+    rootPassword:     "changeme-root-password"
+    username:         "cryptouser"
+    password:         "changeme-password"
+    database:         "crypto_analytics"
+  resources:
+    requests:
+      cpu:    "500m"
+      memory: "2Gi"
+    limits:
+      cpu:    "1000m"
+      memory: "4Gi"
+  persistence:
+    enabled: true
+    size:    "20Gi"
