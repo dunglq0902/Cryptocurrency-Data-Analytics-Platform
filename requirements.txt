@@ -1,38 +1,33 @@
 # Aggregated Python dependencies for the full project.
-# Covers ingestion, Spark jobs, alert-engine, Airflow DAGs/plugins, and tests.
+# Covers ingestion, Spark jobs, alert-engine, and tests.
 #
-# Note: Airflow is typically installed in its own environment with official
-# constraints. It is still listed here because the DAGs/plugins in this repo
-# depend on it.
+# Kiến trúc điều chỉnh: Removed Airflow, Prometheus (replaced by APScheduler
+# and FastAPI /metrics endpoint).
 
-# Ingestion
+# ── Ingestion ─────────────────────────────────────────────────
 aiohttp==3.9.1
 asyncio-throttle==1.0.2
 confluent-kafka==2.3.0
 python-dotenv==1.0.0
 requests==2.31.0
 websockets==12.0
+apscheduler==3.10.4
 
-# Spark / data processing
-delta-spark==3.1.0
+# ── Spark / data processing ──────────────────────────────────
+delta-spark==3.2.0
 numpy==1.24.4
-pandas==2.1.4
+pandas==2.0.3
 pyarrow==14.0.2
-pyspark==3.5.0
+pyspark==3.5.2
+# pandas-ta removed from main requirements because project code does not
+# import it directly. If you need technical-analysis helpers for local
+# exploration or notebooks, see `requirements.dev.txt`.
 
-# Alert engine / API
-fastapi==0.109.0
-httpx==0.26.0
-motor==3.3.2
-prometheus-client==0.19.0
-pydantic==2.5.3
+# ── Alert engine / API ───────────────────────────────────────
+fastapi==0.111.0
+httpx==0.27.0
+motor==3.4.0
+pydantic==2.7.0
 pymongo==4.6.1
-uvicorn[standard]==0.27.0
+uvicorn[standard]==0.30.0
 
-# Airflow / orchestration
-apache-airflow==2.8.0
-apache-airflow-providers-apache-spark
-
-# Test dependencies
-pytest==7.4.4
-pytest-asyncio==0.23.3
