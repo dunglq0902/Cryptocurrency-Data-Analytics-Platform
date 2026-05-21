@@ -9,6 +9,10 @@ from typing import Dict, Any, List
 from pathlib import Path
 from dotenv import load_dotenv
 
+# Tìm file .env ở thư mục gốc của dự án (Project Root)
+BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
+
 # ─────────────────────────────────────────────
 # Kafka Broker Settings
 # ─────────────────────────────────────────────
@@ -72,10 +76,6 @@ def get_partition_for_symbol(symbol: str) -> int:
     """Return deterministic partition index for a given symbol.(Trả về chỉ số phân vùng cố định cho một mã (symbol) nhất định)"""
     return SYMBOL_PARTITION_MAP.get(symbol, hash(symbol) % len(SUPPORTED_SYMBOLS))
 
-
-# Tìm file .env ở thư mục gốc của dự án (Project Root)
-BASE_DIR = Path(__file__).resolve().parent.parent 
-load_dotenv(BASE_DIR / ".env")
 
 # ─────────────────────────────────────────────
 # Binance API Settings
