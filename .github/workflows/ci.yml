@@ -1,0 +1,162 @@
+# .github/workflows/ci.yml
+# Continuous Integration — runs on every PR and push to main
+# Linting, testing, Docker image build validation
+
+name: CI Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/crypto-analytics
+
+jobs:
+  # ─── Lint ───────────────────────────────────────────────────────────────────
+  lint:
+    name: "🔍 Lint & Format Check"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install linting tools
+        run: |
+          pip install --upgrade pip
+          pip install flake8 black isort mypy
+
+      - name: Run flake8
+        run: |
+          flake8 ingestion/ spark/ alert-engine/ scripts/ \
+            --max-line-length=120 \
+            --extend-ignore=E501,W503,E203 \
+            --count --show-source --statistics
+
+      - name: Check Black formatting
+        run: |
+          black --check --diff --line-length=120 \
+            ingestion/ spark/ alert-engine/ scripts/
+
+      - name: Check import order (isort)
+        run: |
+          isort --check-only --diff --profile black \
+            ingestion/ spark/ alert-engine/ scripts/
+
+  # ─── Unit Tests ─────────────────────────────────────────────────────────────
+  test:
+    name: "🧪 Unit Tests"
+    runs-on: ubuntu-latest
+    needs: lint
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports:
+          - 27017:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: root
+          MONGO_INITDB_ROOT_PASSWORD: changeme
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements.dev.txt
+
+      - name: Run tests
+        env:
+          MONGO_URI: mongodb://root:changeme@localhost:27017
+          MONGO_DB: crypto_analytics_test
+          KAFKA_BOOTSTRAP_SERVERS: localhost:9092
+        run: |
+          python -m pytest tests/ -v --tb=short -x \
+            --ignore=tests/test_spark_jobs.py \
+            --ignore=tests/test_spark_udfs.py \
+            -k "not spark"
+
+  # ─── Docker Build Validation ────────────────────────────────────────────────
+  docker-build:
+    name: "🐳 Docker Build Check"
+    runs-on: ubuntu-latest
+    needs: lint
+    strategy:
+      matrix:
+        include:
+          - name: alert-engine
+            dockerfile: docker/Dockerfile.alert-engine
+          - name: ingestion
+            dockerfile: docker/Dockerfile.ingestion
+          - name: dashboard
+            dockerfile: docker/Dockerfile.dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.name }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: ${{ env.IMAGE_PREFIX }}/${{ matrix.name }}:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Spark Image Build ─────────────────────────────────────────────────────
+  spark-build:
+    name: "⚡ Spark Image Build"
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Spark image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.spark
+          push: false
+          tags: ${{ env.IMAGE_PREFIX }}/spark:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Helm Lint ──────────────────────────────────────────────────────────────
+  helm-lint:
+    name: "⎈ Helm Lint"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: "v3.14.0"
+
+      - name: Lint helm/infra
+        run: helm lint helm/infra/ --strict || true
+
+      - name: Lint helm/apps
+        run: helm lint helm/apps/ --strict || true

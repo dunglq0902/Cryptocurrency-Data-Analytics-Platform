@@ -1,0 +1,139 @@
+# .github/workflows/cd.yml
+# Continuous Deployment — builds and pushes Docker images, deploys to K8s
+# Triggered on tags or manual dispatch
+
+name: CD Pipeline
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "staging"
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/crypto-analytics
+
+jobs:
+  # ─── Build & Push Docker Images ─────────────────────────────────────────────
+  build-push:
+    name: "🐳 Build & Push Images"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - name: alert-engine
+            dockerfile: docker/Dockerfile.alert-engine
+          - name: ingestion
+            dockerfile: docker/Dockerfile.ingestion
+          - name: spark
+            dockerfile: docker/Dockerfile.spark
+          - name: dashboard
+            dockerfile: docker/Dockerfile.dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── Deploy to Kubernetes ──────────────────────────────────────────────────
+  deploy:
+    name: "🚀 Deploy to K8s"
+    runs-on: ubuntu-latest
+    needs: build-push
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.29.0"
+
+      - name: Configure kubeconfig
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: "v3.14.0"
+
+      - name: Deploy Infrastructure
+        run: |
+          helm upgrade --install crypto-infra helm/infra/ \
+            --namespace crypto-analytics \
+            --create-namespace \
+            --wait --timeout 300s
+
+      - name: Deploy Applications
+        run: |
+          helm upgrade --install crypto-apps helm/apps/ \
+            --namespace crypto-analytics \
+            --wait --timeout 300s \
+            --set global.imageTag=${{ github.sha }}
+
+      - name: Apply K8s Manifests
+        run: |
+          kubectl apply -f k8s/namespaces/
+          kubectl apply -f k8s/storage/
+          kubectl apply -f k8s/kafka/
+          kubectl apply -f k8s/spark/
+
+      - name: Verify deployment
+        run: |
+          kubectl -n crypto-analytics rollout status deployment/alert-api --timeout=120s
+          kubectl -n crypto-analytics rollout status deployment/notification-service --timeout=120s
+          kubectl -n crypto-analytics rollout status deployment/alert-consumer --timeout=120s
+          echo "✅ Deployment successful!"
+
+      - name: Show pod status
+        if: always()
+        run: |
+          kubectl -n crypto-analytics get pods
+          kubectl -n crypto-analytics get services
