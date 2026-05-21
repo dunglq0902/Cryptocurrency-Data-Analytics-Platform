@@ -1,8 +1,5 @@
 # Aggregated Python dependencies for the full project.
 # Covers ingestion, Spark jobs, alert-engine, and tests.
-#
-# Kiến trúc điều chỉnh: Removed Airflow, Prometheus (replaced by APScheduler
-# and FastAPI /metrics endpoint).
 
 # ── Ingestion ─────────────────────────────────────────────────
 aiohttp==3.9.1
@@ -19,9 +16,6 @@ numpy==1.24.4
 pandas==2.0.3
 pyarrow==14.0.2
 pyspark==3.5.2
-# pandas-ta removed from main requirements because project code does not
-# import it directly. If you need technical-analysis helpers for local
-# exploration or notebooks, see `requirements.dev.txt`.
 
 # ── Alert engine / API ───────────────────────────────────────
 fastapi==0.111.0
