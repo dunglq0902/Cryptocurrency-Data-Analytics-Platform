@@ -1,0 +1,126 @@
+# helm/infra/values.yaml
+# Helm values for infrastructure components:
+#   Kafka, MinIO (via chart or custom), MongoDB, Schema Registry
+
+# ── Global ─────────────────────────────────────────────────────────────────────
+global:
+  imageRegistry:  ""
+  storageClass:   "standard"   # override with your StorageClass (e.g. gp2 on AWS)
+  namespace:      ""           # defaults to Release namespace if blank
+
+# ── Kafka ──────────────────────────────────────────────────────────────────────
+kafka:
+  enabled: false
+  image:
+    repository: bitnami/kafka
+    tag:        "3.7"
+  kraft:
+    enabled: true
+  resources:
+    requests:
+      cpu:    "250m"
+      memory: "1Gi"
+    limits:
+      cpu:    "1000m"
+      memory: "1.5Gi"
+  persistence:
+    enabled:      true
+    size:         "50Gi"
+    storageClass: "standard"
+  config: |-
+    default.replication.factor=1
+    min.insync.replicas=1
+    auto.create.topics.enable=true
+    log.retention.hours=72
+    log.segment.bytes=1073741824
+  topics:
+    - name:              raw-crypto-ticks
+      partitions:        3
+      replicationFactor: 1
+      retentionMs:       604800000    # 7 days
+    - name:              raw-ohlcv
+      partitions:        3
+      replicationFactor: 1
+      retentionMs:       604800000
+    - name:              raw-orderbook
+      partitions:        3
+      replicationFactor: 1
+      retentionMs:       86400000     # 1 day
+    - name:              processed-signals
+      partitions:        3
+      replicationFactor: 1
+      retentionMs:       2592000000   # 30 days
+    - name:              alert-events
+      partitions:        3
+      replicationFactor: 1
+      retentionMs:       2592000000
+
+# ── Zookeeper ──────────────────────────────────────────────────────────────────
+zookeeper:
+  enabled: false
+  resources:
+    requests:
+      cpu:    "100m"
+      memory: "256Mi"
+    limits:
+      cpu:    "250m"
+      memory: "512Mi"
+  persistence:
+    size: "10Gi"
+
+# ── Schema Registry ────────────────────────────────────────────────────────────
+schemaRegistry:
+  enabled: false
+  image:
+    repository: confluentinc/cp-schema-registry
+    tag:        "7.5.0"
+  replicaCount: 1
+  resources:
+    requests:
+      cpu:    "200m"
+      memory: "512Mi"
+    limits:
+      cpu:    "500m"
+      memory: "1Gi"
+
+# ── MinIO ──────────────────────────────────────────────────────────────────────
+minio:
+  enabled: true
+  auth:
+    rootUser: admin
+    rootPassword: password
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+  persistence:
+    enabled: true
+    size: "50Gi"
+  defaultBuckets: "crypto-lake, checkpoints"
+
+# ── MongoDB ────────────────────────────────────────────────────────────────────
+mongodb:
+  enabled: true
+  image:
+    tag: "latest"
+  architecture: standalone
+  replicaCount: 1
+  auth:
+    enabled:          true
+    rootPassword:     "changeme-root-password"
+    username:         "cryptouser"
+    password:         "changeme-password"
+    database:         "crypto_analytics"
+  resources:
+    requests:
+      cpu:    "250m"
+      memory: "1Gi"
+    limits:
+      cpu:    "500m"
+      memory: "2Gi"
+  persistence:
+    enabled: true
+    size:    "20Gi"
