@@ -153,3 +153,4 @@ Write-Host "Troubleshooting:" -ForegroundColor Yellow
 Write-Host "  If NodePort does not work - use port-forward:"
 Write-Host "  kubectl port-forward svc/dashboard 8501:8501 -n crypto-analytics"
 Write-Host ""
+

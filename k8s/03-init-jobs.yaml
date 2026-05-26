@@ -122,3 +122,4 @@ spec:
             - "mongodb://root:changeme@mongodb:27017"
             - --db
             - crypto_analytics
+

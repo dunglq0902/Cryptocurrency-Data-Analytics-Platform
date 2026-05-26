@@ -177,3 +177,4 @@ spec:
                 secretKeyRef:
                   name: binance-credentials
                   key: api-secret
+
