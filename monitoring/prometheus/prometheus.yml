@@ -1,0 +1,47 @@
+# monitoring/prometheus/prometheus.yml
+# Prometheus configuration for Crypto Analytics Platform
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  # ── Prometheus Self-monitoring ──────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ── Alert Engine API (FastAPI + custom metrics) ─────────────────────────────
+  - job_name: "alert-api"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["alert-api:8000"]
+        labels:
+          service: "alert-engine-api"
+
+  # ── Notification Service ────────────────────────────────────────────────────
+  - job_name: "notification-service"
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["notification-service:8001"]
+        labels:
+          service: "notification-service"
+
+  # ── Kafka Exporter (broker + consumer lag metrics) ──────────────────────────
+  - job_name: "kafka-exporter"
+    static_configs:
+      - targets: ["kafka-exporter:9308"]
+        labels:
+          service: "kafka"
+
+  # ── Spark Master Web UI ────────────────────────────────────────────────────
+  - job_name: "spark-master"
+    metrics_path: /metrics/prometheus
+    static_configs:
+      - targets: ["spark-master:8080"]
+        labels:
+          service: "spark-master"
+    # Spark may not expose /metrics/prometheus — this is a best-effort scrape
+    honor_labels: true
+    scrape_interval: 30s
