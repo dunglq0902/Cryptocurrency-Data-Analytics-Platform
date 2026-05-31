@@ -59,6 +59,9 @@ BRONZE_ORDERBOOK_SCHEMA = StructType([
     StructField("source",       StringType(),    nullable=True),
 ])
 
+#==============================================================================================
+# All schema below are being unused. They are left for upgrade in the future.
+
 # ─────────────────────────────────────────────
 # SILVER – Cleaned + enriched with indicators
 # ─────────────────────────────────────────────
