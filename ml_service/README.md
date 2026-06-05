@@ -135,38 +135,38 @@ python -m ml_service.inference.predict_ensemble
 --- 
 
 ## 📈 Đánh giá mô hình
-Dữ liệu được chia theo thời gian (time-series split)
-Không shuffle dữ liệu để tránh leakage
-Metrics sử dụng:
-Accuracy
-Precision
-Recall
-F1-score
+- Dữ liệu được chia theo thời gian (time-series split)
+- Không shuffle dữ liệu để tránh leakage
+- Metrics sử dụng:
+    - Accuracy
+    - Precision
+    - Recall
+-   - F1-score
 
 --- 
 
 ## ⚠️ Lưu ý quan trọng
-Đây là bài toán time-series classification, không phải classification thông thường
-Kết quả có thể thay đổi theo từng lần train do tính chất ngẫu nhiên của model
-XGBoost thường cho kết quả ổn định hơn
-Ensemble giúp giảm nhiễu và ổn định dự đoán
+- Đây là bài toán time-series classification, không phải classification thông thường
+- Kết quả có thể thay đổi theo từng lần train do tính chất ngẫu nhiên của model
+- XGBoost thường cho kết quả ổn định hơn
+- Ensemble giúp giảm nhiễu và ổn định dự đoán
 
 ---
 
 ## 📌 Hướng phát triển tiếp theo (nếu mở rộng)
-Tối ưu hyperparameter (GridSearch / Optuna)
-Walk-forward validation
-Feature selection nâng cao
-Thêm Deep Learning (LSTM / Transformer)
-Build API realtime bằng FastAPI
+- Tối ưu hyperparameter (GridSearch / Optuna)
+- Walk-forward validation
+- Feature selection nâng cao
+- Thêm Deep Learning (LSTM / Transformer)
+- Build API realtime bằng FastAPI
 
 ---
 
 ### 👨‍💻 Ghi chú
 Module này được xây dựng trong project hệ thống phân tích dữ liệu crypto end-to-end, bao gồm:
-    Data ingestion
-    Streaming (Spark)
-    Storage (MongoDB)
-    ML prediction
+- Data ingestion
+- Streaming (Spark)
+- Storage (MongoDB)
+- ML prediction
 
 ---
