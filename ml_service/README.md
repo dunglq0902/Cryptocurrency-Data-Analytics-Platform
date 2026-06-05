@@ -141,7 +141,7 @@ python -m ml_service.inference.predict_ensemble
     - Accuracy
     - Precision
     - Recall
--   - F1-score
+    - F1-score
 
 --- 
 
