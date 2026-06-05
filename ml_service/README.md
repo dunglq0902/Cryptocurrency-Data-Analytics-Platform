@@ -88,31 +88,30 @@ Kết quả cuối cùng được quyết định bằng voting:
 
 ## 📁 Cấu trúc thư mục
 
-
+```bash
 ml_service/
-│
 ├── features/
-│ └── feature_engineering.py # Tạo feature chung
+│   └── feature_engineering.py      # Tạo feature chung
 │
 ├── models/
-│ ├── train_logistic.py
-│ ├── train_rf.py
-│ └── train_xgb.py
+│   ├── train_logistic.py
+│   ├── train_rf.py
+│   └── train_xgb.py
 │
 ├── inference/
-│ ├── predict.py # Dự đoán bằng 1 model
-│ └── predict_ensemble.py # Dự đoán bằng ensemble
+│   ├── predict.py                  # Dự đoán bằng 1 model
+│   └── predict_ensemble.py         # Dự đoán bằng ensemble
 │
 ├── model/
-│ ├── logistic.pkl
-│ ├── rf.pkl
-│ ├── xgb.pkl
-│ └── scaler_logistic.pkl
+│   ├── logistic.pkl
+│   ├── rf.pkl
+│   ├── xgb.pkl
+│   └── scaler_logistic.pkl
 │
 └── requirements.txt
+```
 
-
----
+--- 
 
 ## 🚀 Cách train model
 
@@ -123,15 +122,19 @@ python -m ml_service.models.train_logistic
 python -m ml_service.models.train_rf
 python -m ml_service.models.train_xgb
 
+```
 
-🔮 Cách chạy dự đoán
+---
+
+## 🔮 Cách chạy dự đoán
 1. Dự đoán bằng 1 model:
 python -m ml_service.inference.predict
 2. Dự đoán bằng ensemble:
 python -m ml_service.inference.predict_ensemble
 
+--- 
 
-📈 Đánh giá mô hình
+## 📈 Đánh giá mô hình
 Dữ liệu được chia theo thời gian (time-series split)
 Không shuffle dữ liệu để tránh leakage
 Metrics sử dụng:
@@ -140,25 +143,30 @@ Precision
 Recall
 F1-score
 
+--- 
 
-⚠️ Lưu ý quan trọng
+## ⚠️ Lưu ý quan trọng
 Đây là bài toán time-series classification, không phải classification thông thường
 Kết quả có thể thay đổi theo từng lần train do tính chất ngẫu nhiên của model
 XGBoost thường cho kết quả ổn định hơn
 Ensemble giúp giảm nhiễu và ổn định dự đoán
 
+---
 
-📌 Hướng phát triển tiếp theo (nếu mở rộng)
+## 📌 Hướng phát triển tiếp theo (nếu mở rộng)
 Tối ưu hyperparameter (GridSearch / Optuna)
 Walk-forward validation
 Feature selection nâng cao
 Thêm Deep Learning (LSTM / Transformer)
 Build API realtime bằng FastAPI
 
+---
 
-👨‍💻 Ghi chú
+### 👨‍💻 Ghi chú
 Module này được xây dựng trong project hệ thống phân tích dữ liệu crypto end-to-end, bao gồm:
     Data ingestion
     Streaming (Spark)
     Storage (MongoDB)
     ML prediction
+
+---
