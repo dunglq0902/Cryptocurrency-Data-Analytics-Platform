@@ -1,9 +1,8 @@
 # Cryptocurrency Data Analytics Platform
 
 > **Streaming Lakehouse Architecture | Real-time Trading Signals**  
-> Big Data Systems
+> Big Data Systems — Optimized for Kubernetes Deployment
 ---
-
 ## Mục lục
 
 1. [Tổng quan](#1-tổng-quan)
@@ -11,15 +10,13 @@
 3. [Cấu trúc thư mục](#3-cấu-trúc-thư-mục)
 4. [Stack công nghệ](#4-stack-công-nghệ)
 5. [Yêu cầu môi trường](#5-yêu-cầu-môi-trường)
-6. [Quickstart – Local Development](#6-quickstart--local-development)
-7. [Kubernetes Deployment](#7-kubernetes-deployment)
-8. [Cấu hình chi tiết](#8-cấu-hình-chi-tiết)
-9. [Apache Spark Jobs](#9-apache-spark-jobs)
-10. [Alert Engine](#10-alert-engine)
-11. [Airflow DAGs](#11-airflow-dags)
-12. [Monitoring](#12-monitoring)
-13. [Tests](#13-tests)
-14. [CI/CD](#14-cicd)
+6. [Quickstart – Kubernetes Deployment](#6-quickstart--kubernetes-deployment)
+7. [Cấu hình chi tiết](#7-cấu-hình-chi-tiết)
+8. [Unified Spark Streaming Job](#8-unified-spark-streaming-job)
+9. [Alert Engine](#9-alert-engine)
+10. [Machine Learning](#10-machine-learning)
+11. [Tests](#11-tests)
+12. [CI/CD](#12-cicd)
 
 ---
 
@@ -27,18 +24,25 @@
 
 **Cryptocurrency Data Analytics Platform** là hệ thống xử lý dữ liệu lớn toàn diện, thu thập và phân tích dữ liệu thị trường tiền mã hóa theo thời gian thực từ sàn giao dịch Binance. Hệ thống áp dụng kiến trúc **Streaming Lakehouse** kết hợp với **Medallion Architecture** (Bronze → Silver → Gold) và cung cấp hệ thống cảnh báo tín hiệu giao dịch (mua/bán) có khả năng cá nhân hóa cao.
 
+### Kiến trúc tối ưu hóa
+
+Hệ thống được thiết kế linh hoạt và tối ưu hóa tài nguyên:
+- **Kafka KRaft mode** — bỏ Zookeeper
+- **Unified Spark Streaming** — gộp 4 jobs thành 1 `foreachBatch` pipeline
+- **APScheduler** — thay thế Airflow (nhẹ và hiệu quả hơn)
+- **Monitoring** — stack Prometheus + Grafana được tích hợp dễ dàng.
+
 ### Tính năng chính
 
 | Tính năng | Mô tả |
 |---|---|
 | **Real-time Ingestion** | WebSocket streaming từ Binance (tick data, OHLCV, order book) |
-| **Batch Backfill** | REST API producer để nạp dữ liệu lịch sử |
-| **Streaming ETL** | Spark Structured Streaming với watermark, exactly-once |
+| **Batch Backfill** | REST API producer để nạp dữ liệu lịch sử (APScheduler) |
+| **Unified Streaming ETL** | 1 Spark job: Bronze → Silver → Gold → Alerts |
 | **Technical Indicators** | RSI, MACD, Bollinger Bands, MA, ATR, Volume Profile |
 | **Alert Engine** | Hệ thống cảnh báo mua/bán với điều kiện lọc tùy chỉnh |
 | **Notifications** | Telegram Bot, Email (SMTP), Webhook |
-| **Orchestration** | Apache Airflow với 8 DAGs tự động hóa toàn bộ pipeline |
-| **Monitoring** | Grafana dashboards + Prometheus metrics + alerting rules |
+| **Dashboard UI** | Streamlit Web App để quản lý rules và visualize dữ liệu |
 
 ---
 
@@ -48,34 +52,42 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        INGESTION LAYER                              │
 │   Binance WebSocket ──► Kafka (raw-ohlcv, raw-ticks, raw-orderbook) │
-│   Binance REST API  ──► Kafka (historical backfill)                 │
+│   APScheduler (daily backfill, hourly data quality check)           │
 └─────────────────────────────┬───────────────────────────────────────┘
                               │ Spark Structured Streaming
+                              │ (Unified foreachBatch Pipeline)
 ┌─────────────────────────────▼───────────────────────────────────────┐
-│                      PROCESSING LAYER                               │
+│                   PROCESSING LAYER (1 Spark Driver)                  │
 │  Bronze (raw)  ──►  Silver (cleaned + indicators)  ──►  Gold (agg) │
-│  S3/Delta         S3/Delta Lake                  S3/Delta     │
+│  MinIO/Delta       MinIO/Delta Lake                  MinIO/Delta    │
 └─────────────────────────────┬───────────────────────────────────────┘
                               │
-       ┌──────────────────────┼──────────────────────┐
-       ▼                      ▼                      ▼
-┌─────────────┐    ┌──────────────────┐    ┌────────────────────┐
-│   Grafana   │    │  Alert Engine    │    │   Superset / BI    │
-│  Dashboards │    │  FastAPI + Rules │    │    SQL Analytics   │
-└─────────────┘    └────────┬─────────┘    └────────────────────┘
-                            │
-               ┌────────────┴────────────┐
-               ▼                         ▼
-        Telegram Bot               Email / Webhook
+                   ┌──────────┴──────────┐
+                   ▼                     ▼
+          ┌──────────────────┐    ┌────────────────────┐
+          │ Alert Consumer   │    │   Delta Lake        │
+          │ (Kafka Bridge)   │    │   Query / Analytics │
+          └────────┬─────────┘    │   (SQL / Spark)     │
+                   │              └────────────────────┘
+                   ▼
+          ┌──────────────────┐    ┌────────────────────┐
+          │  Alert Engine    │◄───┤ Dashboard (UI)      │
+          │  FastAPI + Rules │    │ (Streamlit)         │
+          │  (MongoDB)       │    └────────────────────┘
+          └────────┬─────────┘
+                   │
+      ┌────────────┴────────────┐
+      ▼                         ▼
+Telegram Bot            Email / Webhook
 ```
 
 ### Medallion Architecture
 
 | Zone | Description | Format |
 |---|---|---|
-| **Bronze** | Raw data từ Kafka, không biến đổi, có metadata | Parquet / Delta |
-| **Silver** | Đã làm sạch, normalize, technical indicators | Delta Lake |
-| **Gold** | Multi-timeframe OHLCV, VWAP, window functions | Delta Lake (Z-ordered) |
+| **Bronze** | Raw data từ Kafka, không biến đổi, có metadata | Delta Lake (MinIO) |
+| **Silver** | Đã làm sạch, normalize, technical indicators | Delta Lake (MinIO) |
+| **Gold** | Multi-timeframe OHLCV, VWAP, window functions | Delta Lake (MinIO) |
 
 ---
 
@@ -85,98 +97,70 @@
 crypto-analytics-platform/
 │
 ├── ingestion/                      # Binance API producers
-│   ├── binance_ws_producer.py      # WebSocket streaming (tick data)
-│   ├── binance_rest_producer.py    # REST API (historical OHLCV)
-│   └── kafka_config.py             # Kafka settings, topic definitions
+│   ├── main.py                    # Entry point (WebSocket + APScheduler)
+│   ├── binance_ws_producer.py     # WebSocket streaming (tick data)
+│   ├── binance_rest_producer.py   # REST API (historical OHLCV)
+│   ├── kafka_config.py            # Kafka settings, topic definitions
+│   ├── scheduler.py               # APScheduler (thay Airflow)
+│   └── startup_backfill.py        # Tự động nạp dữ liệu quá khứ khi khởi động
 │
 ├── spark/                          # PySpark jobs & utilities
 │   ├── jobs/
-│   │   ├── bronze_ingest.py        # Kafka → Bronze Delta (streaming)
-│   │   ├── silver_clean.py         # Bronze → Silver (6-stage pipeline)
-│   │   ├── gold_aggregate.py       # Silver → Gold (multi-timeframe)
-│   │   └── alert_evaluator.py      # Gold → Alert signals
+│   │   └── unified_streaming.py   # Unified pipeline (Bronze→Silver→Gold→Alert)
 │   ├── udfs/
-│   │   └── indicator_udfs.py       # RSI, MACD, candle classifier UDFs
+│   │   └── indicator_udfs.py      # RSI, MACD, candle classifier UDFs
 │   ├── schemas/
-│   │   └── bronze_schema.py        # Spark DataFrame schemas
+│   │   └── bronze_schema.py       # Spark DataFrame schemas (Bronze/Silver/Gold)
 │   └── utils/
-│       └── spark_session.py        # SparkSession factory + helpers
+│       └── spark_session.py       # SparkSession factory + helpers
 │
-├── airflow/
-│   ├── dags/                       # 8 DAGs covering full pipeline lifecycle
-│   │   ├── crypto_bronze_ingestion.py
-│   │   ├── crypto_silver_processing.py
-│   │   ├── crypto_gold_aggregation.py
-│   │   ├── crypto_alert_evaluation.py
-│   │   ├── crypto_historical_backfill.py
-│   │   ├── crypto_data_quality.py
-│   │   ├── crypto_model_training.py   # includes crypto_cleanup DAG
-│   │   └── crypto_silver_processing.py
-│   └── plugins/
-│       └── kafka_sensor.py         # Custom KafkaTopicSensor
-│
-├── alert-engine/
+├── alert_engine/                   # Alert Engine microservice
 │   ├── api/
-│   │   ├── main.py                 # FastAPI app (CRUD + dispatch endpoint)
-│   │   ├── models.py               # Pydantic models for rules & events
+│   │   ├── main.py                # FastAPI app (CRUD + dispatch endpoint)
+│   │   ├── models.py              # Pydantic models for rules & events
 │   │   └── routes/
-│   │       └── rules.py            # /api/v1/rules CRUD router
+│   │       └── rules.py           # /api/v1/rules CRUD router
+│   ├── consumer/
+│   │   └── alert_consumer.py      # Kafka consumer nhận events báo động
 │   ├── evaluator/
-│   │   └── rule_engine.py          # Pure-Python rule condition evaluator
+│   │   └── rule_engine.py         # Pure-Python rule condition evaluator
 │   └── notifier/
-│       ├── notifiers.py            # Telegram, Email, Webhook dispatchers
+│       ├── notifiers.py           # Telegram, Email, Webhook dispatchers
 │       └── notification_service.py # FastAPI notification microservice
 │
-├── k8s/                            # Kubernetes manifests
-│   ├── namespaces/namespaces.yaml
-│   ├── kafka/kafka-statefulset.yaml
-│   ├── spark/spark-applications.yaml
-│   ├── spark/alert-engine.yaml
-│   ├── airflow/airflow-values.yaml
-│   └── monitoring/monitoring.yaml
+├── dashboard/                      # Streamlit UI (UI cho chạy K8s)
+│   ├── app.py                     # Quản lý Alert Rules & Monitoring
+│   └── requirements.txt
+│
+├── monitoring/                     # Cấu hình Prometheus & Grafana
+│   ├── prometheus/
+│   └── grafana/
 │
 ├── docker/                         # Dockerfiles & requirements
 │   ├── Dockerfile.spark
 │   ├── Dockerfile.alert-engine
 │   ├── Dockerfile.ingestion
-│   ├── spark-defaults.conf
-│   ├── requirements.spark.txt
-│   ├── requirements.alert-engine.txt
-│   └── requirements.ingestion.txt
-│
-├── helm/
-│   ├── infra/                      # Chart for Kafka, MinIO, MongoDB
-│   │   ├── Chart.yaml
-│   │   └── values.yaml
-│   └── apps/                       # Chart for Alert Engine, Airflow, Ingestion
-│       ├── Chart.yaml
-│       └── values.yaml
-│
-├── monitoring/
-│   ├── prometheus/
-│   │   ├── prometheus.yml          # Prometheus scrape configuration
-│   │   └── alert_rules.yml         # Alerting rules (Kafka, Spark, DQ, system)
-│   └── grafana/
-│       ├── dashboard_crypto_prices.json   # Real-time price + RSI + alerts
-│       └── dashboard_kafka_spark.json     # Kafka lag + Spark performance
-│
-├── tests/
-│   ├── conftest.py                 # Shared pytest fixtures
-│   ├── test_ingestion.py           # Unit tests for producers & parsers
-│   ├── test_alert_engine.py        # Unit tests for rule evaluator & models
-│   ├── test_spark_udfs.py          # Unit tests for UDF logic
-│   ├── test_spark_jobs.py          # Integration tests (requires PySpark)
-│   └── test_alert_api.py           # API endpoint tests (TestClient)
+│   ├── Dockerfile.dashboard
+│   └── ...
 │
 ├── scripts/
-│   ├── setup.sh                    # One-shot local dev setup
-│   ├── teardown.sh                 # Stop and optionally remove volumes
-│   ├── seed_data.py                # Seed MongoDB with sample alert rules
-│   └── submit_spark_job.sh         # spark-submit helper (local + K8s)
+│   ├── setup.sh                   # One-shot local dev setup
+│   ├── teardown.sh                # Stop and optionally remove volumes
+│   ├── seed_data.py               # Seed MongoDB with sample alert rules
+│   ├── submit_spark_job.sh        # spark-submit helper
+│   ├── produce_test_msgs.py       # Produce test Kafka messages
+│   ├── run_bronze_smoke.py        # Smoke test for streaming pipeline
+│   ├── backfill.py                # Trigger backfill thủ công
+│   └── create_secrets.sh          # Khởi tạo k8s secrets
 │
-├── docker-compose.yml              # Local development stack
+├── tests/                          # Unit & integration tests
+│   ├── ...                        # Các file tests
+│
+├── k8s/                            # Kubernetes manifests
+├── helm/                           # Helm charts
 ├── .env.example                    # Environment variable template
-└── README.md                       # This file
+├── requirements.txt                # Aggregated Python dependencies
+└── README.md
 ```
 
 ---
@@ -186,41 +170,34 @@ crypto-analytics-platform/
 | Thành phần | Công nghệ | Phiên bản |
 |---|---|---|
 | Data Source | Binance WebSocket/REST API | v3 |
-| Message Queue | Apache Kafka + Schema Registry | 3.6+ / 7.5 |
-| Stream Processing | Apache Spark (PySpark) | 3.5+ |
-| Distributed Storage | MinIO/S3 + Delta Lake | 3.x |
-| NoSQL Database | MongoDB | 7.x |
-| Orchestration | Apache Airflow | 2.8+ |
-| Alert Engine | FastAPI + Motor | 0.109 / 3.3 |
+| Message Queue | Apache Kafka (KRaft mode) | 7.7.1 |
+| Stream Processing | Apache Spark (PySpark) | 3.5.2 |
+| Storage | MinIO (S3-compatible) + Delta Lake | 3.2.0 |
+| NoSQL Database | MongoDB | 7.0 |
+| Scheduling | APScheduler (thay Airflow) | 3.10.4 |
+| Alert Engine | FastAPI + Motor (async MongoDB) | 0.111.0 / 3.4.0 |
+| Dashboard | Streamlit | Mới nhất |
 | Containerization | Docker | 24+ |
-| Orchestration Platform | Kubernetes (Minikube/EKS) | 1.28+ |
-| Monitoring | Prometheus + Grafana | 2.49 / 10.3 |
+| K8s Distribution | Kubernetes (k3s, minikube, EKS, v.v.) | 1.28+ |
 | Language | Python | 3.11+ |
 
 ---
 
 ## 5. Yêu cầu môi trường
 
-### Local Development
+### Kubernetes Cluster
 
 | Công cụ | Phiên bản tối thiểu |
 |---|---|
-| Docker Desktop | 24.0+ |
-| Python | 3.11+ |
-| Java (OpenJDK) | 11+ |
-| Git | 2.40+ |
-
-### Production (Kubernetes)
-
-| Công cụ | Phiên bản tối thiểu |
-|---|---|
-| kubectl | 1.28+ |
-| Minikube (dev) hoặc EKS/GKE | 1.32+ |
+| Kubernetes (k3s, minikube, EKS, AKS, v.v.) | 1.28+ |
 | Helm | 3.13+ |
+| kubectl | 1.28+ |
 
 ---
 
-## 6. Quickstart – Local Development
+## 6. Quickstart – Kubernetes Deployment
+
+Dự án được thiết kế để chạy trực tiếp trên Kubernetes. Bạn có thể sử dụng các raw YAML manifests trong thư mục `k8s/` hoặc Helm charts trong `helm/`.
 
 ### Bước 1: Clone và cấu hình
 
@@ -233,138 +210,40 @@ cp .env.example .env
 # Điền Binance API keys và Telegram bot token vào .env
 ```
 
-### Bước 2: Setup tự động (khuyến nghị)
+### Bước 2: Deploy lên Kubernetes
 
+Dành cho môi trường đã cài đặt Kubernetes (có thể dùng script `deploy.ps1` nếu dùng Windows với Docker Desktop/Kind):
+
+```powershell
+# Chạy script để tự động build images và deploy tất cả K8s resources
+.\k8s\deploy.ps1
+```
+*(Chi tiết các bước deploy và yaml có sẵn trong thư mục `k8s/`)*
+
+Hoặc triển khai thủ công bằng kubectl:
 ```bash
-bash scripts/setup.sh
+kubectl apply -f k8s/
 ```
 
-Script này sẽ tự động:
-- Kiểm tra prerequisites
-- Khởi động toàn bộ stack với docker-compose
-- Tạo Kafka topics
-- Khởi tạo MongoDB indexes
-- Chạy unit tests
-
-### Bước 3: Chạy thủ công từng bước
+### Bước 3: Kiểm tra trạng thái
 
 ```bash
-# 1. Khởi động infrastructure
-docker-compose up -d
-
-# 2. Khởi động Binance WebSocket producer
-python ingestion/binance_ws_producer.py --symbols BTCUSDT ETHUSDT --interval 1m
-
-# 3. Submit Bronze Spark job (terminal mới)
-bash scripts/submit_spark_job.sh bronze
-
-# 4. Submit Silver Spark job (sau khi Bronze chạy)
-bash scripts/submit_spark_job.sh silver --date $(date +%Y-%m-%d)
-
-# 5. Submit Gold Spark job
-bash scripts/submit_spark_job.sh gold --date $(date +%Y-%m-%d)
-
-# 6. Khởi động Alert Engine API
-uvicorn alert_engine.api.main:app --host 0.0.0.0 --port 8000 --reload
-
-# 7. Seed sample alert rules
-python scripts/seed_data.py
+kubectl get pods -n crypto-analytics
+kubectl logs -l app=spark-unified-job -n crypto-analytics
 ```
 
-### Bước 4: Truy cập các giao diện
+### Bước 4: Truy cập các giao diện (Port Forwarding)
 
-| Service | URL | Credentials |
+Sử dụng `kubectl port-forward` để truy cập các dịch vụ (ví dụ):
+
+| Service | Port Forwarding Command | URL |
 |---|---|---|
-| Kafka UI | http://localhost:8080 | — |
-| Spark Master UI | http://localhost:8082 | — |
-| Airflow Webserver | http://localhost:8081 | admin / admin |
-| Alert Engine API | http://localhost:8000/docs | — |
-| Grafana | http://localhost:3000 | admin / admin |
-| Prometheus | http://localhost:9090 | — |
-| MinIO Console | http://localhost:9001 | — |
+| Dashboard | `kubectl port-forward svc/dashboard 8501:8501 -n crypto-analytics` | http://localhost:8501 |
+| Alert API | `kubectl port-forward svc/alert-api 8000:8000 -n crypto-analytics` | http://localhost:8000/docs |
 
 ---
 
-## 7. Kubernetes Deployment
-
-### Setup Minikube
-
-```bash
-# Khởi động Minikube với đủ resources
-minikube start --cpus=6 --memory=12288 --disk-size=50g
-
-# Bật addons cần thiết
-minikube addons enable metrics-server
-minikube addons enable ingress
-```
-
-### Deploy Infrastructure
-
-```bash
-# Thêm Helm repos
-helm repo add bitnami https://charts.bitnami.com/bitnami
-helm repo add apache-airflow https://airflow.apache.org
-helm repo update
-
-# Tạo namespaces
-kubectl apply -f k8s/namespaces/namespaces.yaml
-
-# Deploy infrastructure (Kafka, MongoDB, MinIO)
-helm upgrade --install crypto-infra ./helm/infra \
-  --namespace kafka-system \
-  --values helm/infra/values.yaml
-
-# Deploy Kafka cluster
-kubectl apply -f k8s/kafka/kafka-statefulset.yaml -n kafka-system
-
-# Deploy Monitoring
-kubectl apply -f k8s/monitoring/monitoring.yaml
-```
-
-### Deploy Applications
-
-```bash
-# Deploy Spark Operator
-helm install spark-operator spark-operator/spark-operator \
-  --namespace spark-system \
-  --set sparkJobNamespace=spark-system
-
-# Deploy Spark jobs
-kubectl apply -f k8s/spark/spark-applications.yaml -n spark-system
-
-# Deploy Alert Engine
-kubectl apply -f k8s/spark/alert-engine.yaml -n app-system
-
-# Deploy Airflow
-helm upgrade --install airflow apache-airflow/airflow \
-  --namespace airflow-system \
-  --values k8s/airflow/airflow-values.yaml
-
-# Deploy full app stack
-helm upgrade --install crypto-apps ./helm/apps \
-  --namespace app-system \
-  --values helm/apps/values.yaml
-```
-
-### Kiểm tra trạng thái
-
-```bash
-# Kiểm tra tất cả pods
-kubectl get pods --all-namespaces
-
-# Port-forward Grafana để xem dashboard
-kubectl port-forward svc/grafana 3000:3000 -n monitoring-system
-
-# Port-forward Airflow UI
-kubectl port-forward svc/airflow-webserver 8080:8080 -n airflow-system
-
-# Xem logs Spark job
-kubectl logs -n spark-system -l spark-role=driver
-```
-
----
-
-## 8. Cấu hình chi tiết
+## 7. Cấu hình chi tiết
 
 ### Environment Variables quan trọng
 
@@ -374,9 +253,9 @@ kubectl logs -n spark-system -l spark-role=driver
 | `BINANCE_API_SECRET` | Binance API secret | — |
 | `KAFKA_BOOTSTRAP_SERVERS` | Kafka broker address | `localhost:9092` |
 | `S3_ENDPOINT` | MinIO S3 Endpoint | `http://minio:9000` |
-| `MONGO_URI` | MongoDB connection string | `mongodb://localhost:27017` |
+| `MONGO_URI` | MongoDB connection string | `mongodb://root:changeme@localhost:27017` |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot API token | — |
-| `SPARK_MASTER` | Spark master URL | `local[*]` |
+| `SPARK_MASTER` | Spark master URL | `spark://localhost:7077` |
 
 ### Kafka Topics
 
@@ -384,37 +263,35 @@ kubectl logs -n spark-system -l spark-role=driver
 |---|---|---|---|
 | `raw-crypto-ticks` | 5 | 7 ngày | Individual trade events |
 | `raw-ohlcv` | 5 | 7 ngày | 1-min OHLCV candles |
-| `raw-orderbook` | 5 | 1 ngày | Best bid/ask |
+| `raw-orderbook` | 5 | 7 ngày | Best bid/ask |
 | `processed-signals` | 5 | 30 ngày | Processed trading signals |
 | `alert-events` | 5 | 30 ngày | Alert trigger events |
 
 ---
 
-## 9. Apache Spark Jobs
+## 8. Unified Spark Streaming Job
 
-### Tổng quan 4 jobs
+### Kiến trúc: 1 Driver thay vì 4
 
-| Job | File | Input | Output | Mode |
-|---|---|---|---|---|
-| **Bronze Ingest** | `bronze_ingest.py` | Kafka | Bronze Delta | Streaming |
-| **Silver Clean** | `silver_clean.py` | Bronze Delta | Silver Delta | Batch + Streaming |
-| **Gold Aggregate** | `gold_aggregate.py` | Silver Delta | Gold Delta | Batch + Streaming |
-| **Alert Evaluator** | `alert_evaluator.py` | Gold Delta | Kafka `alert-events` | Streaming |
+Thay vì 4 Spark jobs riêng biệt (Bronze, Silver, Gold, Alert), hệ thống gộp tất cả vào 1 `foreachBatch` pipeline trong `spark/jobs/unified_streaming.py`:
 
-### Chạy jobs thủ công
+```python
+def process_batch(batch_df, batch_id):
+    bronze_df = transform_bronze(batch_df)      # Parse Kafka JSON, validate
+    silver_df = transform_silver(bronze_df)      # Clean, dedup, indicators
+    gold_df   = transform_gold(silver_df)        # Multi-timeframe resample
+    alerts    = evaluate_alerts(gold_df)          # Rule evaluation vs MongoDB
+
+    bronze_df.write.format("delta").save(...)
+    silver_df.write.format("delta").save(...)
+    gold_df.write.format("delta").save(...)
+    alerts.write.format("kafka").save(...)        # → alert-events topic
+```
+
+### Chạy thủ công
 
 ```bash
-# Bronze – streaming (chạy liên tục)
-bash scripts/submit_spark_job.sh bronze
-
-# Silver – batch cho ngày cụ thể
-bash scripts/submit_spark_job.sh silver --date 2024-01-15 --mode batch
-
-# Gold – batch
-bash scripts/submit_spark_job.sh gold --date 2024-01-15 --mode batch
-
-# Alert Evaluator – streaming
-bash scripts/submit_spark_job.sh alert
+bash scripts/submit_spark_job.sh unified
 ```
 
 ### Technical Indicators được tính
@@ -424,13 +301,25 @@ bash scripts/submit_spark_job.sh alert
 | MA7, MA25, MA99 | Moving Averages | 7, 25, 99 nến |
 | Bollinger Bands | Upper/Middle/Lower band | 20 nến, 2σ |
 | RSI(14) | Relative Strength Index | 14 nến |
-| MACD | 12-26-9 | EMA-based |
+| MACD | 12-26-9 | SMA-based |
 | ATR(14) | Average True Range | 14 nến |
 | Volume Ratio | Volume / MA(20) volume | 20 nến |
+| Candle Pattern | Doji, Hammer, Shooting Star, etc. | Per-candle |
+| VWAP | Volume-Weighted Average Price | Gold layer |
+
+### Multi-Timeframe Resampling (Gold Layer)
+
+| Timeframe | Duration |
+|---|---|
+| 5m | 5 minutes |
+| 15m | 15 minutes |
+| 1h | 1 hour |
+| 4h | 4 hours |
+| 1d | 1 day |
 
 ---
 
-## 10. Alert Engine
+## 9. Alert Engine
 
 ### API Endpoints
 
@@ -445,7 +334,6 @@ GET    /api/v1/rules/{rule_id}/history # Lịch sử trigger của rule
 
 POST   /api/v1/notifications/dispatch  # Dispatch alert event (internal)
 GET    /health                         # Health check
-GET    /metrics                        # Prometheus metrics
 ```
 
 ### Ví dụ tạo Alert Rule
@@ -464,7 +352,7 @@ curl -X POST http://localhost:8000/api/v1/rules/ \
       {"field": "volume_ratio",   "operator": ">",  "value": 1.5},
       {"field": "candle_pattern", "operator": "==", "value": "HAMMER"}
     ],
-    "notification_channels": ["telegram"],
+    "notification_channels": ["email"],
     "cooldown_seconds": 300
   }'
 ```
@@ -479,48 +367,28 @@ curl -X POST http://localhost:8000/api/v1/rules/ \
 | `macd`, `macd_signal` | tất cả operators | `macd crosses_above 0` |
 | `ma7`, `ma25`, `ma99` | tất cả operators | `ma7 > ma25` |
 | `candle_pattern` | `==`, `!=` | `candle_pattern == HAMMER` |
+| `vwap` | `>`, `<`, `>=`, `<=` | `close > vwap` |
 
----
+### Notification Channels
 
-## 11. Airflow DAGs
-
-| DAG | Schedule | Mô tả |
-|---|---|---|
-| `crypto_bronze_ingestion` | Mỗi 1 phút | Monitor Kafka lag → trigger Bronze streaming job |
-| `crypto_silver_processing` | Mỗi 5 phút | Bronze → Silver cleaning + indicators |
-| `crypto_gold_aggregation` | Mỗi 15 phút | Silver → Gold multi-timeframe OHLCV |
-| `crypto_alert_evaluation` | Mỗi 1 phút | Evaluate rules → dispatch notifications |
-| `crypto_historical_backfill` | Hàng ngày | Backfill lịch sử từ Binance REST API |
-| `crypto_data_quality` | Hàng giờ | Kiểm tra null rate, freshness, row count |
-| `crypto_model_training` | Hàng tuần | Spark MLlib RandomForest + K-Means |
-| `crypto_cleanup` | Hàng ngày 00:00 | Delta VACUUM + OPTIMIZE |
-
----
-
-## 12. Monitoring
-
-### Grafana Dashboards
-
-| Dashboard | Mô tả |
+| Channel | Cấu hình |
 |---|---|
-| **Real-time Prices** | Candlestick prices, RSI, Volume Ratio, Alert count |
-| **Kafka & Spark** | Consumer lag, throughput, batch duration, memory |
+| **Email** | Set `SMTP_*` env vars + `email_address` in rule |
+---
 
-Truy cập Grafana tại `http://localhost:3000` (admin/admin).
+## 10. Machine Learning
 
-### Prometheus Metrics chính
+*Lưu ý: Tính năng Machine Learning đang trong quá trình phát triển. Mã nguồn sẽ được bổ sung trong bản cập nhật tới.*
 
-| Metric | Mô tả |
-|---|---|
-| `kafka_consumer_group_lag` | Consumer lag per topic partition |
-| `spark_streaming_last_completed_batch_processing_time_ms` | Batch latency |
-| `alert_engine_dispatched_total` | Total alerts dispatched |
-| `crypto_dq_freshness_seconds` | Data freshness per layer |
-| `crypto_dq_row_count` | Row count per Delta table |
+Hệ thống được thiết kế để tích hợp các mô hình Machine Learning nhằm nâng cao khả năng phân tích và dự đoán, dự kiến bao gồm:
+- **Price Prediction**: Dự đoán giá ngắn hạn bằng các mô hình Time-series (LSTM, Prophet) dựa trên dữ liệu OHLCV.
+- **Sentiment Analysis**: Phân tích cảm xúc thị trường thông qua dữ liệu thu thập từ các nguồn tin tức.
+- **Anomaly Detection**: Phát hiện các bất thường trong giao dịch.
+- **Model Training Pipeline**: Quy trình huấn luyện mô hình tự động chạy định kỳ bằng dữ liệu lịch sử.
 
 ---
 
-## 13. Tests
+## 11. Tests
 
 ```bash
 # Cài đặt test dependencies
@@ -545,14 +413,14 @@ pytest tests/test_ingestion.py::TestKlineParser -v
 | Module | Tests |
 |---|---|
 | `ingestion/` | `test_ingestion.py` – parsers, producers, partition logic |
-| `alert-engine/evaluator/` | `test_alert_engine.py` – conditions, AND/OR logic, batch eval |
-| `alert-engine/api/` | `test_alert_api.py` – CRUD endpoints, validation |
+| `alert_engine/evaluator/` | `test_alert_engine.py` – conditions, AND/OR logic, batch eval |
+| `alert_engine/api/` | `test_alert_api.py` – CRUD endpoints, validation |
 | `spark/udfs/` | `test_spark_udfs.py` – candle classifier, RSI, formatters |
 | `spark/jobs/` | `test_spark_jobs.py` – Silver clean, Gold aggregate (integration) |
 
 ---
 
-## 14. CI/CD
+## 12. CI/CD
 
 Pipeline GitHub Actions (`.github/workflows/ci.yml`):
 
@@ -562,14 +430,3 @@ Pipeline GitHub Actions (`.github/workflows/ci.yml`):
 4. **Push to Registry** – Tag với Git SHA
 5. **Helm Lint** – Validate chart templates
 6. **Deploy** – Helm upgrade via ArgoCD (production branch only)
-
----
-
-## Lưu ý
-
-- File `.env` chứa API keys nhạy cảm — **không commit** vào Git.
-- Cấu hình Kubernetes secrets trong production bằng **Sealed Secrets** hoặc **Vault**.
-- Delta Lake VACUUM giữ 7 ngày lịch sử (Bronze), 14 ngày (Silver), 30 ngày (Gold).
-- Spark streaming jobs sử dụng **RocksDB State Store** và checkpoint trên MinIO — đảm bảo MinIO luôn khả dụng trước khi submit jobs.
-
----
