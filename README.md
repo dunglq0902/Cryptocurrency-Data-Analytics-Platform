@@ -27,10 +27,10 @@
 ### Kiến trúc tối ưu hóa
 
 Hệ thống được thiết kế linh hoạt và tối ưu hóa tài nguyên:
-- **Kafka KRaft mode** — bỏ Zookeeper
+- **Kafka KRaft mode**
 - **Unified Spark Streaming** — gộp 4 jobs thành 1 `foreachBatch` pipeline
-- **APScheduler** — thay thế Airflow (nhẹ và hiệu quả hơn)
-- **Monitoring** — stack Prometheus + Grafana được tích hợp dễ dàng.
+- **APScheduler**
+- **Monitoring**
 
 ### Tính năng chính
 
