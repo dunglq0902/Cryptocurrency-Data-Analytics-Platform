@@ -136,6 +136,12 @@ crypto-analytics-platform/
 │   ├── prometheus/
 │   └── grafana/
 │
+├── ml_service/                     # Machine Learning Models & Services
+│   ├── features/                  # Feature engineering
+│   ├── inference/                 # Model inference serving
+│   ├── model/                     # Model training & evaluation
+│   └── models/                    # Saved models/weights
+│
 ├── docker/                         # Dockerfiles & requirements
 │   ├── Dockerfile.spark
 │   ├── Dockerfile.alert-engine
@@ -144,14 +150,7 @@ crypto-analytics-platform/
 │   └── ...
 │
 ├── scripts/
-│   ├── setup.sh                   # One-shot local dev setup
-│   ├── teardown.sh                # Stop and optionally remove volumes
-│   ├── seed_data.py               # Seed MongoDB with sample alert rules
-│   ├── submit_spark_job.sh        # spark-submit helper
-│   ├── produce_test_msgs.py       # Produce test Kafka messages
-│   ├── run_bronze_smoke.py        # Smoke test for streaming pipeline
-│   ├── backfill.py                # Trigger backfill thủ công
-│   └── create_secrets.sh          # Khởi tạo k8s secrets
+│   └── seed_data.py               # Seed MongoDB with sample alert rules
 │
 ├── tests/                          # Unit & integration tests
 │   ├── ...                        # Các file tests
@@ -378,13 +377,11 @@ curl -X POST http://localhost:8000/api/v1/rules/ \
 
 ## 10. Machine Learning
 
-*Lưu ý: Tính năng Machine Learning đang trong quá trình phát triển. Mã nguồn sẽ được bổ sung trong bản cập nhật tới.*
-
-Hệ thống được thiết kế để tích hợp các mô hình Machine Learning nhằm nâng cao khả năng phân tích và dự đoán, dự kiến bao gồm:
-- **Price Prediction**: Dự đoán giá ngắn hạn bằng các mô hình Time-series (LSTM, Prophet) dựa trên dữ liệu OHLCV.
-- **Sentiment Analysis**: Phân tích cảm xúc thị trường thông qua dữ liệu thu thập từ các nguồn tin tức.
-- **Anomaly Detection**: Phát hiện các bất thường trong giao dịch.
-- **Model Training Pipeline**: Quy trình huấn luyện mô hình tự động chạy định kỳ bằng dữ liệu lịch sử.
+Hệ thống tích hợp module Machine Learning (`ml_service`) để nâng cao khả năng phân tích, bao gồm:
+- **Price Prediction**: Dự đoán biến động giá bằng các mô hình học máy dựa trên tập dữ liệu lịch sử và realtime.
+- **Inference Service**: Phục vụ các dự đoán (inference) thông qua API theo thời gian thực.
+- **Model Training**: Quy trình pipeline chuẩn bị dữ liệu, huấn luyện và đánh giá mô hình.
+- **Feature Engineering**: Thiết kế và tính toán các đặc trưng (features) quan trọng đầu vào cho các mô hình.
 
 ---
 
