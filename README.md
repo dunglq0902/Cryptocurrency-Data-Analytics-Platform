@@ -62,17 +62,17 @@ Hệ thống được thiết kế linh hoạt và tối ưu hóa tài nguyên:
 │  MinIO/Delta       MinIO/Delta Lake                  MinIO/Delta    │
 └─────────────────────────────┬───────────────────────────────────────┘
                               │
-                   ┌──────────┴──────────┐
-                   ▼                     ▼
-          ┌──────────────────┐    ┌────────────────────┐
-          │ Alert Consumer   │    │   Delta Lake        │
-          │ (Kafka Bridge)   │    │   Query / Analytics │
-          └────────┬─────────┘    │   (SQL / Spark)     │
-                   │              └────────────────────┘
-                   ▼
-          ┌──────────────────┐    ┌────────────────────┐
-          │  Alert Engine    │◄───┤ Dashboard (UI)      │
-          │  FastAPI + Rules │    │ (Streamlit)         │
+                   ┌──────────┴──────────┬──────────────────────┐
+                   ▼                     ▼                      ▼
+          ┌──────────────────┐    ┌────────────────────┐  ┌───────────────────┐
+          │ Alert Consumer   │    │   Delta Lake       │  │    ML Service     │
+          │ (Kafka Bridge)   │    │   Query / Analytics│  │ (Price Predict /  │
+          └────────┬─────────┘    │   (SQL / Spark)    │  │  Inference API)   │
+                   │              └────────────────────┘  └─────────┬─────────┘
+                   ▼                                                │
+          ┌──────────────────┐    ┌────────────────────┐            │
+          │  Alert Engine    │◄───┤ Dashboard (UI)     │◄───────────┘
+          │  FastAPI + Rules │    │ (Streamlit)        │
           │  (MongoDB)       │    └────────────────────┘
           └────────┬─────────┘
                    │
